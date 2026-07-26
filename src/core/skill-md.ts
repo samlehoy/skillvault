@@ -43,7 +43,8 @@ const knownFrontmatter = z.looseObject({
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 export function parseSkillMd(content: string): SkillMdResult {
-  const match = FRONTMATTER_PATTERN.exec(content);
+  // Windows editors and PowerShell's Out-File commonly emit a UTF-8 BOM.
+  const match = FRONTMATTER_PATTERN.exec(content.replace(/^﻿/, ""));
   if (!match) {
     return {
       ok: false,

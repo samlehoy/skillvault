@@ -99,6 +99,13 @@ body
     }
   });
 
+  it("accepts a UTF-8 BOM before the frontmatter", () => {
+    const result = parseSkillMd(
+      "﻿---\nname: a\ndescription: b\n---\nbody\n",
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it("accepts CRLF line endings", () => {
     const result = parseSkillMd(
       "---\r\nname: a\r\ndescription: b\r\n---\r\nbody\r\n",
