@@ -200,6 +200,7 @@ First run discovers existing skills across supported adapters, classifies duplic
 - Deterministic collision and likely-duplicate candidate reporting.
 - Import candidate model with scope, target, content, path, and ownership evidence.
 - Third-party installer layout support: the vercel-labs `skills` store (`~/.agents/skills` plus `.skill-lock.json`) is discovered as unmanaged skills with importable lock metadata.
+- Bundle labels (pulled forward from M6): installer lockfiles are read at discovery time to attach a Declared source-repository label per skill, powering the TUI's by-bundle grouping (`g`) and bundle-scoped batch selection (see TUI_FLOW.md, "bundle grouping"); no evidence means an explicit unknown, never a name-based guess.
 - Conflict resolution for same normalized ID with different content.
 - Import plan that stages canonical content, backs up unmanaged directories, and replaces approved targets with managed links.
 - Recovery view for interrupted imports.

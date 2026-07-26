@@ -192,6 +192,15 @@ Dim full-screen overlay listing every key, grouped by screen. Any key closes it.
 - **Plan goes stale between review and apply** (files changed underneath): the executor rejects it; Result shows "re-plan needed" and returns to a refreshed Inventory.
 - **Terminal too short for legend + 12 rows:** viewport shrinks before the legend collapses to one summary line.
 
+## Planned extension: bundle grouping (decided 2026-07-26)
+
+A **bundle** is a source repository that ships multiple skills (e.g. `obra/superpowers`, `cloudflare/skills`). It is not a plugin (plugins are executable IDE extensions, ADR-0007). Decisions:
+
+- The unit of management and removal stays the **individual skill**; removing one skill never implicitly removes its bundle (no dependency resolver — PRODUCT.md non-goal).
+- `g` toggles the section grouping: by status (default) ↔ by bundle (`▣ obra/superpowers (14)`, `▣ (unknown source)`); the provider dimension is already covered by the target tab bar, so no drill-down screens are added.
+- The detail panel and action panel show bundle membership (`part of obra/superpowers — 14 skills`), and the action panel offers an explicit "apply to all N skills from this bundle" batch option (batch apply mechanics arrive with M7), with a warning that same-bundle skills may reference each other.
+- Bundle labels come from installer lockfiles (`~/.agents/.skill-lock.json`, Antigravity `skills-lock.json`) as **Declared** provenance evidence; that provenance-reading slice is pulled forward from M6 into M5. No evidence → `(unknown source)`, never a name-based guess.
+
 ## Planned extension: MCP and Plugins tabs (read-only)
 
 Per ADR-0007, the header gains domain tabs — `[Skills] [MCP] [Plugins]` — where MCP and Plugins are read-only inventories: presence matrix per IDE, same-name-different-config findings for MCP servers, and an installed-plugin list. No action panel exists in those tabs (nothing is mutable), and secret values are never displayed. Detailed screen designs extend this document when that milestone (M6) starts.
