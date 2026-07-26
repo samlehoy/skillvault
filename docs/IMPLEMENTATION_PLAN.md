@@ -6,6 +6,8 @@ This is a living, milestone-level delivery plan. It deliberately avoids file-lev
 
 The implementation stack is decided (see `ARCHITECTURE.md` and ADR-0002): TypeScript on Node LTS, Ink TUI, Vitest, Zod, Git via the system `git` executable, distributed as an npm package.
 
+Progress: Milestone 0 and Milestone 1 are complete (M1 finished 2026-07-26: schemas, skill IDs and collisions, `SKILL.md` validation, override/disable resolution, source descriptors, ownership/actual/plan/operation models, cross-project fixtures, and determinism tests — 92 passing core tests). Milestone 2 (OpenCode local vertical slice and the first public 0.x npm release) is next.
+
 ## Goal
 
 Deliver a Windows-first, inventory-centric TUI that reproducibly manages canonical AI agent skills across OpenCode, Antigravity, Claude Code, and Codex with explicit provenance, zero-drift auditing, and ownership-aware safe uninstall.
