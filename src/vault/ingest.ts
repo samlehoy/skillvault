@@ -64,7 +64,15 @@ const REVISION_KEY_LENGTH = 12;
 export function ingestLocalSkill(request: IngestRequest): IngestResult {
   const { sourceDir, vaultRoot } = request;
 
-  if (inspectPath(sourceDir).kind !== "directory") {
+  // statSync follows links: a live junction to a directory is a valid
+  // source (re-ingesting an already managed skill is an idempotent no-op).
+  let sourceStats: fs.Stats | undefined;
+  try {
+    sourceStats = fs.statSync(sourceDir);
+  } catch {
+    sourceStats = undefined;
+  }
+  if (sourceStats === undefined || !sourceStats.isDirectory()) {
     return fail(
       "vault/source-missing",
       sourceDir,

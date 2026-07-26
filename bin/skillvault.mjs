@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-console.log(`
-SkillVault — local-first TUI for managing AI agent skills across agent IDEs.
+import { run } from "../dist/cli/main.js";
 
-This is a pre-development placeholder release that reserves the package name.
-Follow progress: https://github.com/samlehoy/skillvault
-`);
+process.exitCode = await run(process.argv.slice(2));
