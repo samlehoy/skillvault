@@ -143,8 +143,14 @@ export function ingestLocalSkill(request: IngestRequest): IngestResult {
   const stagingDir = path.join(vaultRoot, ".staging", `${id}-${revisionKey}`);
   try {
     fs.rmSync(stagingDir, { recursive: true, force: true });
-    fs.mkdirSync(stagingDir, { recursive: true });
-    fs.cpSync(sourceDir, stagingDir, { recursive: true });
+    fs.mkdirSync(path.dirname(stagingDir), { recursive: true });
+    // dereference: a junction source (or nested links) is copied by the
+    // content it resolves to, matching hashDirectory's stat-not-lstat
+    // semantics — otherwise cpSync recreates the link itself and the staged
+    // copy can never match the source hash. The staging directory must not
+    // pre-exist: cpSync creates it, avoiding overwrite conflicts when the
+    // source root is itself a link.
+    fs.cpSync(sourceDir, stagingDir, { recursive: true, dereference: true });
 
     const stagedHash = hashDirectory(stagingDir);
     if (!stagedHash.ok || stagedHash.hash !== sourceHash.hash) {

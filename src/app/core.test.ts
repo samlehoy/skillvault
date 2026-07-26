@@ -187,6 +187,42 @@ describe("buildManagePlan", () => {
     expect(created.kind).toBe("junction");
   });
 
+  it("takes over an installer junction without touching the store content", () => {
+    // npx-skills layout: content lives in the agents store, and
+    // ~/.claude/skills/<id> is a foreign junction into it (M0 facts).
+    const store = makeSkill(agentsSkills(), "taken", "store content\n");
+    const claudeDir = path.join(home, ".claude", "skills");
+    fs.mkdirSync(claudeDir, { recursive: true });
+    const claudeLink = path.join(claudeDir, "taken");
+    createJunction(store, claudeLink);
+    const core = createTuiCore({ homeDir: home });
+
+    const row = core.loadInventory().find((r) => r.id === "taken");
+    const claudeLocation = row?.locations.find((l) => l.key === "claude-external");
+    expect(claudeLocation?.health).toBe("external");
+
+    // Take over only the foreign junction; the store stays unchecked.
+    const built = core.buildManagePlan({
+      id: "taken",
+      paths: [claudeLink],
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(core.applyPlan(built.plan).ok).toBe(true);
+
+    // The foreign junction now points into the SkillVault vault...
+    const inspection = inspectPath(claudeLink);
+    expect(inspection.kind).toBe("junction");
+    if (inspection.kind === "junction") {
+      expect(inspection.target).toContain(".skillvault");
+    }
+    // ...and the installer's store keeps its plain directory and content.
+    expect(inspectPath(store).kind).toBe("directory");
+    expect(fs.readFileSync(path.join(store, "SKILL.md"), "utf8")).toContain(
+      "store content",
+    );
+  });
+
   it("never offers the agents store as a creatable target (ADR-0005)", () => {
     makeSkill(opencodeSkills(), "oc-only");
     const creatable = createTuiCore({ homeDir: home }).creatableTargets(
