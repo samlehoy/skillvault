@@ -231,6 +231,7 @@ The inventory explains where each skill came from, how confident that attributio
 - Audits for outdated revisions, manifest-lock mismatch, duplicates, unused entries, scope conflicts, broken links, drift, and stale/unknown provenance.
 - Stable finding identifiers, severity, evidence, and remediation intent.
 - Inventory filters and batch selection based on health, scope, target, and source status.
+- Read-only MCP server discovery per supported IDE (presence matrix, same-name-different-config findings) and installed-plugin inventory, surfaced as TUI tabs; secret values never displayed, copied, or persisted (ADR-0007).
 - Read-only minimal headless `audit` operation with `--json` output.
 
 ### Verification
@@ -287,7 +288,7 @@ Claude Code and Codex reach the same supported behavior as the OpenCode and Anti
 For each adapter independently:
 
 1. Verify official documentation and observed installation behavior.
-2. Record tested versions, paths, formats, installation variants, and uninstall evidence.
+2. Record tested versions, paths, formats, installation variants, uninstall evidence, and MCP/plugin configuration locations.
 3. Implement discovery and actual-state inspection.
 4. Pass the shared adapter contract suite.
 5. Add synchronization and managed uninstall.
@@ -346,6 +347,7 @@ The complete Windows-first MVP is recoverable, diagnosable, documented, and dist
 After MVP evidence justifies expansion, independently plan:
 
 - Official adapter uninstall recipe subsystem with source, compatibility, and freshness metadata.
+- Full MCP configuration synchronization (secret-safe: environment references only, never token values) and plugin install/uninstall management — the MVP ships read-only MCP/plugin inventory (ADR-0007).
 - Production macOS and Linux support.
 - Full CLI parity or a standalone automation API.
 - Desktop or browser UI.

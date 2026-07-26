@@ -121,6 +121,18 @@ The MVP reports:
 
 Likely duplicates are findings for user review. SkillVault does not automatically merge or delete them.
 
+### MCP and plugin visibility (read-only)
+
+Skills are the managed domain; MCP servers and IDE plugins are a **visibility** domain in the MVP:
+
+- Discover MCP server configurations per supported IDE and list them with a presence matrix across IDEs.
+- Flag the same server name configured differently across IDEs as a finding.
+- Discover installed IDE plugins per supported IDE as an inventory list.
+- Strictly read-only: SkillVault never writes MCP configurations, never installs or removes plugins, and never executes anything it finds.
+- Secret values (tokens, keys, credentials) found in MCP configurations are never displayed, copied, or persisted — only the presence of a named setting is shown.
+
+Full MCP configuration synchronization and plugin management are deferred until after the MVP (see ADR-0007).
+
 ### Safe uninstall
 
 Uninstall is ownership-aware and follows this default policy:
@@ -186,6 +198,7 @@ The MVP does not include:
 - A hosted marketplace or central skill registry.
 - The npm registry as a skill source type.
 - An official adapter uninstall recipe subsystem (deferred until after the MVP).
+- Writing MCP server configurations, synchronizing MCP secrets, or installing/uninstalling IDE plugins — the MVP ships read-only MCP/plugin inventory only.
 - User accounts, cloud state, or cloud synchronization.
 - A background monitoring daemon.
 - Automatic unattended updates.
@@ -211,6 +224,7 @@ The MVP does not include:
 10. Failed mutations restore the previous valid state or clearly report any operation that could not be rolled back.
 11. Local management remains useful offline and labels remote information as unavailable or stale.
 12. Minimal headless commands use the same core behavior as the TUI.
+13. The TUI lists MCP servers and installed plugins discovered per verified IDE, with configuration-difference findings, strictly read-only and without exposing secret values.
 
 ## Documentation Policy
 

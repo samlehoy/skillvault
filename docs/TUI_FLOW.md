@@ -191,6 +191,10 @@ Dim full-screen overlay listing every key, grouped by screen. Any key closes it.
 - **Plan goes stale between review and apply** (files changed underneath): the executor rejects it; Result shows "re-plan needed" and returns to a refreshed Inventory.
 - **Terminal too short for legend + 12 rows:** viewport shrinks before the legend collapses to one summary line.
 
+## Planned extension: MCP and Plugins tabs (read-only)
+
+Per ADR-0007, the header gains domain tabs — `[Skills] [MCP] [Plugins]` — where MCP and Plugins are read-only inventories: presence matrix per IDE, same-name-different-config findings for MCP servers, and an installed-plugin list. No action panel exists in those tabs (nothing is mutable), and secret values are never displayed. Detailed screen designs extend this document when that milestone (M6) starts.
+
 ## Out of scope for this iteration
 
-Unlink/uninstall flows, batch multi-select across skills, provenance display and editing, and audit findings views — they arrive with their milestones (M5–M7) and must extend this document when they do.
+Unlink/uninstall flows, batch multi-select across skills, provenance display and editing, audit findings views, and the MCP/Plugins tab designs — they arrive with their milestones (M5–M7) and must extend this document when they do.

@@ -239,6 +239,7 @@ An adapter encapsulates verified behavior for one agent IDE. Conceptually it pro
 - Canonical skill compatibility validation.
 - Install and removal planning.
 - Actual-state inspection.
+- Read-only MCP server and installed-plugin inventory (MVP scope: visibility only).
 - An optional official uninstall recipe with source and freshness metadata (post-MVP).
 
 OpenCode is the reference adapter. Antigravity is the second adapter and validates the contract against a structurally different IDE. Claude Code and Codex follow once the core feature set is complete. No concrete target paths or official commands are architectural facts until verified.
@@ -324,6 +325,7 @@ TUI widgets do not calculate effective state, decide ownership, run Git, or muta
 - Treat update diffs as changes to executable instructions and require review.
 - Treat filesystem ownership as evidence-based state, not filename inference alone.
 - Keep mutating paths constrained to resolved configuration, vault, backup, and verified target roots.
+- Never display, copy, or persist secret values found in MCP configurations; inventory shows only the presence of named settings. MCP/plugin discovery is read-only in the MVP.
 
 ## Open Decisions
 
