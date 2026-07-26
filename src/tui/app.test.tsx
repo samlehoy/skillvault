@@ -69,7 +69,7 @@ describe("App", () => {
     await tick();
     const frame = lastFrame() ?? "";
     expect(frame).toContain("agents-external");
-    expect(frame).toMatch(/> unmanaged +wrangler/);
+    expect(frame).toMatch(/❯ ○ unmanaged +wrangler/);
     unmount();
   });
 
@@ -136,6 +136,33 @@ describe("App", () => {
     await tick();
 
     expect(lastFrame()).toContain("rolled back");
+    unmount();
+  });
+
+  it("windows large inventories with more-indicators instead of overflowing", async () => {
+    const many: InventoryRow[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `skill-${String(i).padStart(2, "0")}`,
+      scope: "global",
+      location: "opencode",
+      health: "ok",
+      path: `C:/skills/skill-${i}`,
+    }));
+    const core = makeCore({ loadInventory: () => many });
+    const { lastFrame, stdin, unmount } = render(<App core={core} />);
+    await tick();
+
+    let frame = lastFrame() ?? "";
+    expect(frame).toContain("30 skills");
+    expect(frame).toContain("skill-00");
+    expect(frame).not.toContain("skill-29");
+    expect(frame).toContain("↓ 18 more");
+
+    for (let i = 0; i < 29; i++) stdin.write("\u001B[B");
+    await tick();
+    frame = lastFrame() ?? "";
+    expect(frame).toContain("skill-29");
+    expect(frame).toContain("↑ 18 more");
+    expect(frame).not.toContain("skill-00");
     unmount();
   });
 

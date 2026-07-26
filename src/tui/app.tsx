@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import { useMemo, useState } from "react";
 import type { Plan } from "../core/plan.js";
 
@@ -11,7 +11,7 @@ import type { Plan } from "../core/plan.js";
  * mutation — the facade is simply never called.
  *
  * Keys: up/down select, l = plan link for the selected skill,
- * y/n = apply/cancel inside plan review.
+ * y/n = apply/cancel inside plan review, q = quit.
  */
 
 export type Health = "ok" | "drift" | "dangling" | "unmanaged";
@@ -39,34 +39,241 @@ export interface TuiCore {
   applyPlan(plan: Plan): ApplyOutcome;
 }
 
-const HEALTH_COLOR: Record<Health, string> = {
-  ok: "green",
-  drift: "yellow",
-  dangling: "red",
-  unmanaged: "cyan",
+const HEALTH_STYLE: Record<Health, { color: string; symbol: string }> = {
+  ok: { color: "green", symbol: "●" },
+  drift: { color: "yellow", symbol: "◆" },
+  dangling: { color: "red", symbol: "✖" },
+  unmanaged: { color: "cyan", symbol: "○" },
 };
+
+const VISIBLE_ROWS = 12;
 
 type View =
   | { readonly name: "inventory" }
   | { readonly name: "plan-review"; readonly plan: Plan }
   | { readonly name: "result"; readonly outcome: ApplyOutcome };
 
-function describeOperationLine(operation: Plan["operations"][number]): string {
+function operationParts(
+  operation: Plan["operations"][number],
+): { verb: string; color: string; detail: string } {
   switch (operation.kind) {
     case "link-create":
-      return `link-create   ${operation.path} -> ${operation.targetPath}`;
+      return {
+        verb: "link-create",
+        color: "green",
+        detail: `${operation.path} → ${operation.targetPath}`,
+      };
     case "link-remove":
-      return `link-remove   ${operation.path}`;
+      return { verb: "link-remove", color: "red", detail: operation.path };
     case "backup":
-      return `backup        ${operation.sourcePath} -> ${operation.backupId}`;
+      return {
+        verb: "backup",
+        color: "yellow",
+        detail: `${operation.sourcePath} → ${operation.backupId}`,
+      };
     case "restore":
-      return `restore       ${operation.backupId} -> ${operation.targetPath}`;
+      return {
+        verb: "restore",
+        color: "yellow",
+        detail: `${operation.backupId} → ${operation.targetPath}`,
+      };
     default:
-      return operation.kind;
+      return { verb: operation.kind, color: "white", detail: "" };
   }
 }
 
+function Header({ inventory }: { readonly inventory: InventoryRow[] }) {
+  const counts = useMemo(() => {
+    const byHealth: Partial<Record<Health, number>> = {};
+    for (const row of inventory) {
+      byHealth[row.health] = (byHealth[row.health] ?? 0) + 1;
+    }
+    return byHealth;
+  }, [inventory]);
+
+  return (
+    <Box justifyContent="space-between">
+      <Text>
+        <Text bold color="magenta">
+          {" ⬢ SkillVault "}
+        </Text>
+        <Text dimColor>· {inventory.length} skills</Text>
+      </Text>
+      <Text>
+        {(Object.keys(HEALTH_STYLE) as Health[]).map((health) => {
+          const count = counts[health];
+          if (!count) return null;
+          const style = HEALTH_STYLE[health];
+          return (
+            <Text key={health}>
+              {"  "}
+              <Text color={style.color}>
+                {style.symbol} {count}
+              </Text>
+              <Text dimColor> {health}</Text>
+            </Text>
+          );
+        })}
+      </Text>
+    </Box>
+  );
+}
+
+function Rule() {
+  return <Text dimColor>{"─".repeat(78)}</Text>;
+}
+
+function InventoryTable({
+  inventory,
+  selected,
+}: {
+  readonly inventory: InventoryRow[];
+  readonly selected: number;
+}) {
+  const start = Math.max(
+    0,
+    Math.min(selected - Math.floor(VISIBLE_ROWS / 2), inventory.length - VISIBLE_ROWS),
+  );
+  const end = Math.min(inventory.length, start + VISIBLE_ROWS);
+  const window = inventory.slice(start, end);
+
+  return (
+    <Box flexDirection="column">
+      {start > 0 ? <Text dimColor>{`   ↑ ${start} more`}</Text> : null}
+      {window.map((row, offset) => {
+        const index = start + offset;
+        const isSelected = index === selected;
+        const style = HEALTH_STYLE[row.health];
+        const cells = `${style.symbol} ${row.health.padEnd(10)} ${row.id.padEnd(28)} `;
+        return isSelected ? (
+          <Text key={row.path} inverse bold>
+            {`❯ ${cells}${row.scope} · ${row.location}`}
+          </Text>
+        ) : (
+          <Text key={row.path}>
+            {"  "}
+            <Text color={style.color}>{cells}</Text>
+            <Text dimColor>{`${row.scope} · ${row.location}`}</Text>
+          </Text>
+        );
+      })}
+      {end < inventory.length ? (
+        <Text dimColor>{`   ↓ ${inventory.length - end} more`}</Text>
+      ) : null}
+    </Box>
+  );
+}
+
+function DetailPanel({ row }: { readonly row: InventoryRow }) {
+  const style = HEALTH_STYLE[row.health];
+  return (
+    <Box flexDirection="column" paddingLeft={1}>
+      <Text>
+        <Text bold>{row.id}</Text>
+        {"  "}
+        <Text color={style.color}>
+          {style.symbol} {row.health}
+        </Text>
+      </Text>
+      <Text>
+        <Text dimColor>{"path   "}</Text>
+        {row.path}
+      </Text>
+      <Text>
+        <Text dimColor>{"where  "}</Text>
+        {row.scope} · {row.location}
+      </Text>
+    </Box>
+  );
+}
+
+function KeyBar({ keys }: { readonly keys: readonly (readonly [string, string])[] }) {
+  return (
+    <Text>
+      {keys.map(([key, label], index) => (
+        <Text key={key}>
+          {index > 0 ? <Text dimColor>{"  ·  "}</Text> : " "}
+          <Text bold color="cyan">
+            {key}
+          </Text>
+          <Text dimColor> {label}</Text>
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+function PlanReview({ plan }: { readonly plan: Plan }) {
+  return (
+    <Box flexDirection="column">
+      <Header inventory={[]} />
+      <Rule />
+      <Text>
+        {" "}
+        <Text bold>Plan review</Text>
+        {"  "}
+        <Text dimColor>{plan.id.slice(0, 21)}…</Text>
+      </Text>
+      <Box
+        borderStyle="round"
+        borderColor="cyan"
+        flexDirection="column"
+        paddingX={1}
+        marginX={1}
+      >
+        {plan.operations.length === 0 ? (
+          <Text dimColor>No operations — already in the desired state.</Text>
+        ) : (
+          plan.operations.map((operation, index) => {
+            const parts = operationParts(operation);
+            return (
+              <Text key={index}>
+                <Text bold color={parts.color}>
+                  {parts.verb.padEnd(13)}
+                </Text>
+                <Text>{parts.detail}</Text>
+              </Text>
+            );
+          })
+        )}
+      </Box>
+      {plan.backupRequired.length > 0 ? (
+        <Text>
+          {" "}
+          <Text color="yellow">⚠ backs up first:</Text>{" "}
+          <Text dimColor>{plan.backupRequired.join(", ")}</Text>
+        </Text>
+      ) : null}
+      <Rule />
+      <KeyBar
+        keys={[
+          ["y", "apply"],
+          ["n", "cancel — no changes"],
+        ]}
+      />
+    </Box>
+  );
+}
+
+function ResultView({ outcome }: { readonly outcome: ApplyOutcome }) {
+  return (
+    <Box flexDirection="column">
+      <Header inventory={[]} />
+      <Rule />
+      <Box paddingLeft={1} flexDirection="column">
+        <Text bold color={outcome.ok ? "green" : "red"}>
+          {outcome.ok ? "✔ Success" : "✖ Failed"}
+        </Text>
+        <Text>{outcome.message}</Text>
+      </Box>
+      <Rule />
+      <KeyBar keys={[["any key", "back to inventory"]]} />
+    </Box>
+  );
+}
+
 export function App({ core }: { readonly core: TuiCore }) {
+  const { exit } = useApp();
   const inventory = useMemo(() => core.loadInventory(), [core]);
   const [selected, setSelected] = useState(0);
   const [view, setView] = useState<View>({ name: "inventory" });
@@ -86,7 +293,9 @@ export function App({ core }: { readonly core: TuiCore }) {
       return;
     }
 
-    if (key.downArrow) {
+    if (input === "q") {
+      exit();
+    } else if (key.downArrow) {
       setSelected((current) => Math.min(current + 1, inventory.length - 1));
       setNotice(null);
     } else if (key.upArrow) {
@@ -105,78 +314,32 @@ export function App({ core }: { readonly core: TuiCore }) {
     }
   });
 
+  if (view.name === "plan-review") return <PlanReview plan={view.plan} />;
+  if (view.name === "result") return <ResultView outcome={view.outcome} />;
+
   const row = inventory[selected];
-
-  if (view.name === "plan-review") {
-    const { plan } = view;
-    return (
-      <Box flexDirection="column">
-        <Text bold>Plan review</Text>
-        <Text dimColor>{plan.id}</Text>
-        <Box borderStyle="round" flexDirection="column" paddingX={1}>
-          {plan.operations.length === 0 ? (
-            <Text dimColor>No operations: already in the desired state.</Text>
-          ) : (
-            plan.operations.map((operation, index) => (
-              <Text key={index}>{describeOperationLine(operation)}</Text>
-            ))
-          )}
-        </Box>
-        {plan.backupRequired.length > 0 ? (
-          <Text color="yellow">
-            Backs up before mutation: {plan.backupRequired.join(", ")}
-          </Text>
-        ) : null}
-        <Text>
-          Apply? <Text bold>y</Text> = apply, <Text bold>n</Text> = cancel (no
-          changes)
-        </Text>
-      </Box>
-    );
-  }
-
-  if (view.name === "result") {
-    return (
-      <Box flexDirection="column">
-        <Text bold color={view.outcome.ok ? "green" : "red"}>
-          {view.outcome.ok ? "Success" : "Failed"}
-        </Text>
-        <Text>{view.outcome.message}</Text>
-        <Text dimColor>Press any key to return.</Text>
-      </Box>
-    );
-  }
 
   return (
     <Box flexDirection="column">
-      <Text bold>SkillVault</Text>
-      <Text dimColor>
-        {inventory.length} skills discovered · arrows select · l = plan link
-      </Text>
-      <Box flexDirection="column" marginTop={1}>
-        {inventory.map((entry, index) => (
-          <Box key={`${entry.path}`} gap={1}>
-            <Text>{index === selected ? ">" : " "}</Text>
-            <Text color={HEALTH_COLOR[entry.health]}>
-              {entry.health.padEnd(9)}
-            </Text>
-            <Text bold={index === selected}>{entry.id.padEnd(24)}</Text>
-            <Text dimColor>
-              {entry.scope}/{entry.location}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-      {row ? (
-        <Box borderStyle="round" flexDirection="column" paddingX={1} marginTop={1}>
-          <Text bold>{row.id}</Text>
-          <Text dimColor>{row.path}</Text>
-          <Text>
-            {row.scope} · {row.location} · {row.health}
-          </Text>
-        </Box>
+      <Header inventory={inventory} />
+      <Rule />
+      <InventoryTable inventory={inventory} selected={selected} />
+      <Rule />
+      {row ? <DetailPanel row={row} /> : <Text dimColor> no skills found</Text>}
+      {notice !== null ? (
+        <Text>
+          {" "}
+          <Text color="red">✖ {notice}</Text>
+        </Text>
       ) : null}
-      {notice !== null ? <Text color="red">{notice}</Text> : null}
+      <Rule />
+      <KeyBar
+        keys={[
+          ["↑↓", "navigate"],
+          ["l", "link"],
+          ["q", "quit"],
+        ]}
+      />
     </Box>
   );
 }
