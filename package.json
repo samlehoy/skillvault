@@ -24,6 +24,10 @@
   "bin": {
     "skillkeep": "bin/skillkeep.mjs"
   },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc"
+  },
   "files": [
     "bin/",
     "README.md",
@@ -31,5 +35,13 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
