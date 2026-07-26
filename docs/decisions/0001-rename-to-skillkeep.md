@@ -14,5 +14,8 @@ Rename the project to **SkillKeep**. The npm name `skillkeep` was verified avail
 ## Consequences
 
 - All documentation and future code use SkillKeep.
-- The local working folder may still be named `SkillVault` until the repository is created; the GitHub repository must be created as `skillkeep`.
 - The npm name should be claimed early with a placeholder release.
+
+## Amendment (2026-07-26)
+
+At the owner's preference, the GitHub repository is named `skillvault` (https://github.com/samlehoy/skillvault) while the product and npm package remain **SkillKeep** / `skillkeep`. The owner accepts the repo/package name mismatch and the proximity to the unrelated commercial SkillVault product; this amendment records that the risk was raised and consciously accepted.

@@ -17,9 +17,9 @@
   "author": "samlehoy",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/samlehoy/skillkeep.git"
+    "url": "git+https://github.com/samlehoy/skillvault.git"
   },
-  "homepage": "https://github.com/samlehoy/skillkeep#readme",
+  "homepage": "https://github.com/samlehoy/skillvault#readme",
   "type": "module",
   "bin": {
     "skillkeep": "bin/skillkeep.mjs"
