@@ -55,6 +55,27 @@ describe("loadInventory (aggregated)", () => {
     expect(rows[0]?.health).toBe("broken");
   });
 
+  it("labels skills with Declared bundles from installer lockfiles", () => {
+    makeSkill(agentsSkills(), "wrangler");
+    makeSkill(opencodeSkills(), "homegrown");
+    fs.writeFileSync(
+      path.join(home, ".agents", ".skill-lock.json"),
+      JSON.stringify({
+        version: 3,
+        skills: {
+          wrangler: { source: "cloudflare/skills", sourceType: "github" },
+        },
+      }),
+      "utf8",
+    );
+
+    const rows = createTuiCore({ homeDir: home }).loadInventory();
+    expect(rows.find((r) => r.id === "wrangler")?.bundle).toBe(
+      "cloudflare/skills",
+    );
+    expect(rows.find((r) => r.id === "homegrown")?.bundle).toBeUndefined();
+  });
+
   it("sorts most attention-worthy first, then alphabetically", () => {
     makeSkill(opencodeSkills(), "bbb");
     const foreign = makeSkill(path.join(home, "elsewhere"), "aaa");

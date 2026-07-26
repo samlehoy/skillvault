@@ -6,6 +6,7 @@ import {
   type DiscoveredSkill,
   type LocationKey as SkillLocation,
 } from "../adapters/types.js";
+import { readDeclaredBundles } from "../installers/lockfiles.js";
 import { planLinkSkill } from "../core/link-planner.js";
 import { createPlan, type Plan, type PlanInput, type Precondition } from "../core/plan.js";
 import { hashDirectory } from "../fs/hash.js";
@@ -38,6 +39,13 @@ export interface AggregatedSkillView {
   readonly health: Health;
   readonly locations: readonly SkillLocationView[];
   readonly targets: Readonly<Record<LocationKey, boolean>>;
+  /**
+   * Declared source-repository label (e.g. "obra/superpowers") read from an
+   * installer lockfile — Declared evidence only, never a name-based guess
+   * (TUI_FLOW.md, "bundle grouping"). Absent when no lockfile mentions the
+   * skill; the TUI renders that as "(unknown source)".
+   */
+  readonly bundle?: string;
 }
 
 export type ContentCheck =
@@ -120,6 +128,11 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
         : "unmanaged";
 
   const loadInventory = (): AggregatedSkillView[] => {
+    // Installer lockfiles are re-read on every load: an `npx skills` run in
+    // another terminal must show up on the next inventory refresh. Multiple
+    // lockfiles may declare the same skill; the first in priority order
+    // (agents store, then Antigravity variants) labels the bundle.
+    const { declared } = readDeclaredBundles({ homeDir: env.homeDir });
     const byId = new Map<string, SkillLocationView[]>();
     const discovered = [
       ...discoverOpencodeSkills(discoveryEnv),
@@ -153,7 +166,14 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
             locations.some((location) => location.key === key),
           ]),
         ) as Record<LocationKey, boolean>;
-        return { id, health, locations, targets };
+        const bundle = declared.get(id)?.[0]?.bundle;
+        return {
+          id,
+          health,
+          locations,
+          targets,
+          ...(bundle !== undefined ? { bundle } : {}),
+        };
       })
       .sort(
         (a, b) =>
