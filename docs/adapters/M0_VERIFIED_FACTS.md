@@ -16,9 +16,11 @@ Node's built-in `fs` junction support satisfies every MVP requirement without el
 
 Pending: re-run on Node 20 LTS in CI (spike ran on v25).
 
-## Ink TUI spike — PENDING
+## Ink TUI spike — PASSED headless, interactive check pending
 
-Requires an interactive terminal session on Windows Terminal and ConHost. Not yet run.
+Headless spike (Node v25.6.1, `ink` + `ink-testing-library`) verified 7/7: inventory table rendering, bordered plan box, progress updates across rerenders, error state, and a real `render()`/`unmount()` cycle against a non-TTY stdout (CI-like environment) without crashing.
+
+Pending: an interactive run on Windows Terminal and ConHost (keyboard input, raw mode, resize) — requires a live terminal session.
 
 ## vercel-labs `skills` CLI layout (observed)
 
@@ -41,11 +43,20 @@ Import consequence: fixtures must cover both the junction layout and the copied-
 - Skill format: directories containing `SKILL.md`, matching the canonical model.
 - Pending: whether Antigravity's skill loader follows directory junctions (needs a live IDE test with a junction-linked skill); official documentation for these paths; project-scope skill location.
 
-## OpenCode (observed)
+## OpenCode (observed + official source citations)
 
-- Global skills directory candidate: `~/.config/opencode/skills/` (plain directories containing `SKILL.md`).
-- Config root `~/.config/opencode/` also holds `opencode.json`, `plugins/`, `AGENTS.md`, and a `package.json`/`node_modules` (plugin deps).
-- Pending: official documentation confirmation, project-scope path, installation variants, junction consumption test.
+Confirmed from upstream source (`anomalyco/opencode`, retrieved 2026-07-26 via documentation index):
+
+- Skill discovery patterns: `{skill,skills}/**/SKILL.md` under OpenCode directories — i.e. global `~/.config/opencode/skill{,s}/` and project `.opencode/skill{,s}/` (`packages/opencode/src/skill/index.ts`).
+- Global config root is XDG-based: `~/.config/opencode/` (`packages/core/src/global.ts`).
+- **OpenCode also natively discovers external skills from `.claude/skills/` and `.agents/skills/`** (same source file, `CLAUDE_EXTERNAL_DIR` / `AGENTS_EXTERNAL_DIR` with pattern `skills/**/SKILL.md`).
+- Skill discovery globs run with `symlink: true` (`packages/core/src/skill.ts`) — skills behind linked directories are followed by design. Strong evidence junctions are consumed; final confirmation folds into the M2 live acceptance run.
+- Upcoming: the v2 config spec redesigns `skills` into a single array of local-path/remote-URL discovery sources (`specs/v2/config.md`). The adapter must record which config schema a detected installation uses.
+
+Planning consequence of the external-directory fact: on this machine OpenCode can see the same skill up to three times (`~/.config/opencode/skills` copy, `~/.claude/skills` junction, `~/.agents/skills` store entry). The OpenCode adapter must treat the external directories as part of actual-state inspection, and the import flow must warn that leaving the `~/.agents` store in place keeps those skills visible to OpenCode alongside SkillKeep-managed ones — a duplicate-visibility audit finding, not a silent assumption.
+
+- Observed locally: `~/.config/opencode/skills/` holds plain copies (9-skill subset installed by the `skills` CLI); config root also holds `opencode.json`, `plugins/`, `AGENTS.md`, and plugin `node_modules`.
+- Pending: installation variants inventory (CLI/desktop), tested-version recording against a live installation.
 
 ## Claude Code (observed, evidence for M8)
 
@@ -53,6 +64,6 @@ Import consequence: fixtures must cover both the junction layout and the copied-
 
 ## Unresolved before M2 can start
 
-1. Ink spike on Windows Terminal + ConHost.
-2. OpenCode official documentation citations (paths, project scope, variants).
-3. Live junction-consumption test for OpenCode (link one disposable skill, confirm the IDE loads it).
+1. Interactive Ink check on Windows Terminal + ConHost (keyboard input, raw mode, resize) — headless rendering already proven.
+2. OpenCode installation-variant inventory and tested-version recording against a live installation.
+3. Live junction-consumption test for OpenCode (link one disposable skill, confirm the IDE loads it) — low risk given the `symlink: true` citation; folds into the M2 acceptance run.
