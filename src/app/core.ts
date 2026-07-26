@@ -45,11 +45,11 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     discoverSkills(discoveryEnv).map((skill) => {
       const health =
         skill.dangling
-          ? "dangling"
+          ? "broken"
           : skill.entryKind === "junction"
             ? skill.junctionTarget?.startsWith(vaultRoot)
-              ? "ok"
-              : "drift"
+              ? "managed"
+              : "external"
             : "unmanaged";
       return {
         id: skill.id,

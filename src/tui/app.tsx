@@ -14,7 +14,7 @@ import type { Plan } from "../core/plan.js";
  * y/n = apply/cancel inside plan review, q = quit.
  */
 
-export type Health = "ok" | "drift" | "dangling" | "unmanaged";
+export type Health = "managed" | "external" | "broken" | "unmanaged";
 
 export interface InventoryRow {
   readonly id: string;
@@ -39,11 +39,30 @@ export interface TuiCore {
   applyPlan(plan: Plan): ApplyOutcome;
 }
 
-const HEALTH_STYLE: Record<Health, { color: string; symbol: string }> = {
-  ok: { color: "green", symbol: "●" },
-  drift: { color: "yellow", symbol: "◆" },
-  dangling: { color: "red", symbol: "✖" },
-  unmanaged: { color: "cyan", symbol: "○" },
+const HEALTH_STYLE: Record<
+  Health,
+  { color: string; symbol: string; meaning: string }
+> = {
+  managed: {
+    color: "green",
+    symbol: "●",
+    meaning: "linked into the SkillVault vault",
+  },
+  external: {
+    color: "yellow",
+    symbol: "◆",
+    meaning: "link owned by another tool (e.g. npx skills)",
+  },
+  broken: {
+    color: "red",
+    symbol: "✖",
+    meaning: "link whose target no longer exists",
+  },
+  unmanaged: {
+    color: "cyan",
+    symbol: "○",
+    meaning: "plain folder, not yet managed — press l to manage",
+  },
 };
 
 const VISIBLE_ROWS = 12;
@@ -82,7 +101,18 @@ function operationParts(
   }
 }
 
-function Header({ inventory }: { readonly inventory: InventoryRow[] }) {
+function Header({ total }: { readonly total?: number }) {
+  return (
+    <Text>
+      <Text bold color="magenta">
+        {" ⬢ SkillVault "}
+      </Text>
+      {total !== undefined ? <Text dimColor>· {total} skills</Text> : null}
+    </Text>
+  );
+}
+
+function Legend({ inventory }: { readonly inventory: InventoryRow[] }) {
   const counts = useMemo(() => {
     const byHealth: Partial<Record<Health, number>> = {};
     for (const row of inventory) {
@@ -92,29 +122,20 @@ function Header({ inventory }: { readonly inventory: InventoryRow[] }) {
   }, [inventory]);
 
   return (
-    <Box justifyContent="space-between">
-      <Text>
-        <Text bold color="magenta">
-          {" ⬢ SkillVault "}
-        </Text>
-        <Text dimColor>· {inventory.length} skills</Text>
-      </Text>
-      <Text>
-        {(Object.keys(HEALTH_STYLE) as Health[]).map((health) => {
-          const count = counts[health];
-          if (!count) return null;
-          const style = HEALTH_STYLE[health];
-          return (
-            <Text key={health}>
-              {"  "}
-              <Text color={style.color}>
-                {style.symbol} {count}
-              </Text>
-              <Text dimColor> {health}</Text>
+    <Box flexDirection="column" paddingLeft={1}>
+      {(Object.keys(HEALTH_STYLE) as Health[]).map((health) => {
+        const style = HEALTH_STYLE[health];
+        const count = counts[health] ?? 0;
+        return (
+          <Text key={health} dimColor={count === 0}>
+            <Text {...(count > 0 ? { color: style.color } : {})}>
+              {style.symbol} {String(count).padStart(3)}
             </Text>
-          );
-        })}
-      </Text>
+            <Text bold={count > 0}>{` ${health.padEnd(10)}`}</Text>
+            <Text dimColor>{style.meaning}</Text>
+          </Text>
+        );
+      })}
     </Box>
   );
 }
@@ -206,7 +227,7 @@ function KeyBar({ keys }: { readonly keys: readonly (readonly [string, string])[
 function PlanReview({ plan }: { readonly plan: Plan }) {
   return (
     <Box flexDirection="column">
-      <Header inventory={[]} />
+      <Header />
       <Rule />
       <Text>
         {" "}
@@ -258,7 +279,7 @@ function PlanReview({ plan }: { readonly plan: Plan }) {
 function ResultView({ outcome }: { readonly outcome: ApplyOutcome }) {
   return (
     <Box flexDirection="column">
-      <Header inventory={[]} />
+      <Header />
       <Rule />
       <Box paddingLeft={1} flexDirection="column">
         <Text bold color={outcome.ok ? "green" : "red"}>
@@ -321,7 +342,9 @@ export function App({ core }: { readonly core: TuiCore }) {
 
   return (
     <Box flexDirection="column">
-      <Header inventory={inventory} />
+      <Header total={inventory.length} />
+      <Rule />
+      <Legend inventory={inventory} />
       <Rule />
       <InventoryTable inventory={inventory} selected={selected} />
       <Rule />

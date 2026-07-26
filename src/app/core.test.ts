@@ -53,8 +53,8 @@ describe("createTuiCore", () => {
     const byId = Object.fromEntries(
       core.loadInventory().map((r) => [r.id, r.health]),
     );
-    expect(byId["gone"]).toBe("dangling");
-    expect(byId["foreign"]).toBe("drift");
+    expect(byId["gone"]).toBe("broken");
+    expect(byId["foreign"]).toBe("external");
   });
 
   it("manages an unmanaged skill end to end: ingest, backup, link, verify", () => {
@@ -86,7 +86,7 @@ describe("createTuiCore", () => {
     const backups = fs.readdirSync(path.join(home, ".skillvault", "backups"));
     expect(backups).toHaveLength(1);
 
-    expect(core.loadInventory()[0]?.health).toBe("ok");
+    expect(core.loadInventory()[0]?.health).toBe("managed");
   });
 
   it("returns a noop plan for an already managed skill", () => {

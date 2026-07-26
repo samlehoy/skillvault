@@ -10,7 +10,7 @@ const rows: InventoryRow[] = [
     id: "code-review",
     scope: "global",
     location: "opencode",
-    health: "ok",
+    health: "managed",
     path: "C:/Users/dev/.config/opencode/skills/code-review",
   },
   {
@@ -57,6 +57,19 @@ describe("App", () => {
     expect(frame).toContain("2 skills");
     expect(frame).toContain("code-review");
     expect(frame).toContain("wrangler");
+    unmount();
+  });
+
+  it("shows a legend explaining every health category with counts", async () => {
+    const { lastFrame, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("linked into the SkillVault vault");
+    expect(frame).toContain("link owned by another tool");
+    expect(frame).toContain("link whose target no longer exists");
+    expect(frame).toContain("not yet managed");
+    expect(frame).toMatch(/● +1 managed/);
+    expect(frame).toMatch(/○ +1 unmanaged/);
     unmount();
   });
 
@@ -144,7 +157,7 @@ describe("App", () => {
       id: `skill-${String(i).padStart(2, "0")}`,
       scope: "global",
       location: "opencode",
-      health: "ok",
+      health: "managed",
       path: `C:/skills/skill-${i}`,
     }));
     const core = makeCore({ loadInventory: () => many });
