@@ -18,3 +18,7 @@ Option (c). SkillKeep maintains its own vault (`~/.skillkeep/vault/`). During im
 - Importing an existing `npx skills` setup yields immediate provenance for every skill instead of starting from Unknown.
 - SkillKeep does not read or write `~/.agents` after import; two tools writing one store cannot coexist with transactional guarantees. Post-import, SkillKeep expects to be the single manager.
 - Risk flagged in M0: if Antigravity turns out to read `~/.agents/skills` directly, that store becomes a sync *target*, and this decision must be revisited.
+
+## Resolution of the flagged risk (2026-07-26)
+
+M0 verification (see `docs/adapters/M0_VERIFIED_FACTS.md`) showed Antigravity does **not** read `~/.agents/` directly: each variant has its own skills directory under `~/.gemini/`, and the `skills` CLI merely copies into them. The decision stands unchanged. Bonus finding: Antigravity keeps its own `skills-lock.json` (schema v1), which becomes a second Declared-provenance source at import time.
