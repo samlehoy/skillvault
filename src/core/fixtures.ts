@@ -82,7 +82,7 @@ export const actualStateFixture: ActualState = {
       skillId: "code-review",
       path: "C:/Users/dev/.config/opencode/skills/code-review",
       linkState: "linked",
-      ownership: "skillkeep-owned",
+      ownership: "skillvault-owned",
     },
     {
       installationId: "opencode-proj-a",

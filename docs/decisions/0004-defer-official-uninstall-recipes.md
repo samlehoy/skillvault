@@ -9,7 +9,7 @@ The original MVP included a verified official uninstall recipe model per adapter
 
 ## Decision
 
-The recipe subsystem is deferred until after the MVP. MVP uninstall is ownership-based managed removal only: remove SkillKeep-owned artifacts, scan residuals, offer a reviewed clean of verified residuals, and always preserve unknown files. The "Officially owned" ownership class is reserved but unused in the MVP.
+The recipe subsystem is deferred until after the MVP. MVP uninstall is ownership-based managed removal only: remove SkillVault-owned artifacts, scan residuals, offer a reviewed clean of verified residuals, and always preserve unknown files. The "Officially owned" ownership class is reserved but unused in the MVP.
 
 ## Consequences
 

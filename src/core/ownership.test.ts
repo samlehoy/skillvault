@@ -8,7 +8,7 @@ import {
 describe("ownership classes", () => {
   it("enumerates exactly the four documented classes", () => {
     expect(OWNERSHIP_CLASSES).toEqual([
-      "skillkeep-owned",
+      "skillvault-owned",
       "officially-owned",
       "user-owned",
       "unknown",
@@ -17,8 +17,8 @@ describe("ownership classes", () => {
 });
 
 describe("isAutoRemovable", () => {
-  it("allows automatic removal only for skillkeep-owned artifacts", () => {
-    expect(isAutoRemovable("skillkeep-owned")).toBe(true);
+  it("allows automatic removal only for skillvault-owned artifacts", () => {
+    expect(isAutoRemovable("skillvault-owned")).toBe(true);
   });
 
   it.each([
@@ -31,8 +31,8 @@ describe("isAutoRemovable", () => {
 });
 
 describe("requiresBackupBeforeMutation", () => {
-  it("does not require a backup for skillkeep-owned artifacts", () => {
-    expect(requiresBackupBeforeMutation("skillkeep-owned")).toBe(false);
+  it("does not require a backup for skillvault-owned artifacts", () => {
+    expect(requiresBackupBeforeMutation("skillvault-owned")).toBe(false);
   });
 
   it.each([

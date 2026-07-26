@@ -13,7 +13,7 @@ Candidates were TypeScript + Ink, Go + Bubble Tea, and Rust + Ratatui. Deciding 
 - TUI: Ink (React-based).
 - Validation: Zod. Testing: Vitest.
 - Git: shell out to the system `git` executable; credentials stay delegated to Git credential helpers / SSH agent.
-- Distribution: npm package, `npx skillkeep`. License: MIT.
+- Distribution: npm package, `npx @samlehoy/skillvault`. License: MIT.
 
 ## Consequences
 

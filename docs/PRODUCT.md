@@ -1,8 +1,8 @@
-# SkillKeep Product Definition
+# SkillVault Product Definition
 
 ## Status
 
-This document is the living source of truth for SkillKeep's product goals and scope. It describes the intended MVP, not current implementation status.
+This document is the living source of truth for SkillVault's product goals and scope. It describes the intended MVP, not current implementation status.
 
 ## Problem
 
@@ -10,13 +10,13 @@ AI agent skills are commonly installed independently for each agent IDE and at b
 
 ## Product Statement
 
-SkillKeep is a local-first terminal user interface that provides one source of truth for AI agent skills and synchronizes an effective skill set across supported agent IDEs at global and project scopes.
+SkillVault is a local-first terminal user interface that provides one source of truth for AI agent skills and synchronizes an effective skill set across supported agent IDEs at global and project scopes.
 
-SkillKeep manages skill files, versions, provenance, and installation state. It does not execute skills or judge whether their instructions are useful or correct.
+SkillVault manages skill files, versions, provenance, and installation state. It does not execute skills or judge whether their instructions are useful or correct.
 
 ## Positioning
 
-Skill installers already exist — notably the vercel-labs `skills` CLI (`npx skills`), which maintains a global store under `~/.agents/skills` and an install lockfile with source metadata. SkillKeep is not another installer. Its differentiation is:
+Skill installers already exist — notably the vercel-labs `skills` CLI (`npx skills`), which maintains a global store under `~/.agents/skills` and an install lockfile with source metadata. SkillVault is not another installer. Its differentiation is:
 
 - Committed per-project manifests and lockfiles that reproduce the same effective skill set on another machine.
 - Drift auditing between desired, resolved, and actual target state.
@@ -24,7 +24,7 @@ Skill installers already exist — notably the vercel-labs `skills` CLI (`npx sk
 - Explicit provenance confidence with user correction.
 - An inventory-centric TUI spanning global and project scopes across multiple agent IDEs.
 
-SkillKeep interoperates with installer output at import time: skills previously installed by third-party installers are discovered as unmanaged local skills, and installer lock metadata is imported as Declared provenance evidence. After import, SkillKeep expects to be the single manager of its managed skills.
+SkillVault interoperates with installer output at import time: skills previously installed by third-party installers are discovered as unmanaged local skills, and installer lock metadata is imported as Declared provenance evidence. After import, SkillVault expects to be the single manager of its managed skills.
 
 ## Target Users
 
@@ -35,7 +35,7 @@ SkillKeep interoperates with installer output at import time: skills previously 
 
 ## North Star
 
-Given the same project manifest and lockfile, SkillKeep can reproduce the same effective skill set and verify zero drift across every supported target installation.
+Given the same project manifest and lockfile, SkillVault can reproduce the same effective skill set and verify zero drift across every supported target installation.
 
 Conceptually:
 
@@ -89,13 +89,13 @@ Discovery, resolution, auditing, Git operations, planning, transactions, and ada
 
 Display a source repository link when one can be established. Every displayed source has a confidence label:
 
-- **Verified:** established from a SkillKeep manifest, lockfile, or verified Git checkout metadata.
+- **Verified:** established from a SkillVault manifest, lockfile, or verified Git checkout metadata.
 - **Declared:** provided by skill metadata or a third-party installer lockfile but not independently verified.
 - **Inferred:** derived from local evidence and presented as a candidate, never as fact.
 - **Unknown:** no defensible source is available.
 - **User-verified:** explicitly corrected or confirmed by the user.
 
-Users can edit unknown or incorrect provenance. Project-relevant corrections are stored in the manifest so collaborators receive the same source declaration. SkillKeep must not search GitHub by skill name and silently attribute a repository.
+Users can edit unknown or incorrect provenance. Project-relevant corrections are stored in the manifest so collaborators receive the same source declaration. SkillVault must not search GitHub by skill name and silently attribute a repository.
 
 ### Discovery and safe import
 
@@ -119,13 +119,13 @@ The MVP reports:
 - Manifest and lockfile disagreement.
 - Missing, stale, or unavailable provenance verification.
 
-Likely duplicates are findings for user review. SkillKeep does not automatically merge or delete them.
+Likely duplicates are findings for user review. SkillVault does not automatically merge or delete them.
 
 ### Safe uninstall
 
 Uninstall is ownership-aware and follows this default policy:
 
-1. Remove artifacts that SkillKeep owns.
+1. Remove artifacts that SkillVault owns.
 2. Scan for residual artifacts after the managed removal.
 3. Offer an explicit clean action for verified residuals.
 4. Preserve unknown files unless the user reviews and explicitly approves their removal.
@@ -176,7 +176,7 @@ These operations consume the same core as the TUI. A comprehensive standalone CL
 
 ## Distribution
 
-SkillKeep is open source under the MIT license and is distributed as an npm package running on Node LTS (`npx skillkeep`). The repository is public from the start of development, and public 0.x releases begin with the first working vertical slice.
+SkillVault is open source under the MIT license and is distributed as an npm package running on Node LTS (`npx @samlehoy/skillvault`). The repository is public from the start of development, and public 0.x releases begin with the first working vertical slice.
 
 ## Non-goals
 
@@ -207,7 +207,7 @@ The MVP does not include:
 6. The inventory displays provenance with an explicit confidence label and permits user correction.
 7. Audit detects outdated, duplicate, unused, conflicting, broken, and drifted state without destructive remediation.
 8. Batch synchronization, update, and uninstall display a consolidated plan before applying changes.
-9. Default uninstall safely removes SkillKeep-owned artifacts, preserves unknown files, and offers a reviewed clean action for verified residuals.
+9. Default uninstall safely removes SkillVault-owned artifacts, preserves unknown files, and offers a reviewed clean action for verified residuals.
 10. Failed mutations restore the previous valid state or clearly report any operation that could not be rolled back.
 11. Local management remains useful offline and labels remote information as unavailable or stale.
 12. Minimal headless commands use the same core behavior as the TUI.

@@ -1,10 +1,10 @@
-# SkillKeep
+# SkillVault
 
-SkillKeep is a local-first TUI for managing AI agent skills across agent IDEs. It keeps a canonical skill vault, resolves global and project-specific configuration, and helps users discover, audit, synchronize, update, and safely uninstall skills.
+SkillVault is a local-first TUI for managing AI agent skills across agent IDEs. It keeps a canonical skill vault, resolves global and project-specific configuration, and helps users discover, audit, synchronize, update, and safely uninstall skills.
 
-SkillKeep is not another skill installer. Installers already exist; SkillKeep adds committed per-project manifests and lockfiles that reproduce the same skill set on another machine, drift auditing, ownership-aware safe uninstall, and explicit source provenance — managed from one inventory-centric terminal UI.
+SkillVault is not another skill installer. Installers already exist; SkillVault adds committed per-project manifests and lockfiles that reproduce the same skill set on another machine, drift auditing, ownership-aware safe uninstall, and explicit source provenance — managed from one inventory-centric terminal UI.
 
-The project is currently in pre-development. Its MVP is Windows-first, distributed via npm (`npx skillkeep`), and targets OpenCode, Antigravity, Claude Code, and Codex through phased adapter delivery.
+The project is currently in pre-development. Its MVP is Windows-first, distributed via npm (`npx @samlehoy/skillvault`), and targets OpenCode, Antigravity, Claude Code, and Codex through phased adapter delivery.
 
 ## Core Goals
 

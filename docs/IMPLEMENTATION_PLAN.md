@@ -1,4 +1,4 @@
-# SkillKeep MVP Implementation Plan
+# SkillVault MVP Implementation Plan
 
 ## Status
 
@@ -106,7 +106,7 @@ The TUI manages one local canonical skill across verified OpenCode global and pr
 - Reusable filesystem abstraction for canonical paths, junction inspection, staging, backups, and scoped mutation.
 - OpenCode reference adapter using only verified paths and behavior.
 - Read-only installation and existing-skill discovery.
-- Vault ingestion for a local skill into `~/.skillkeep/vault/`.
+- Vault ingestion for a local skill into `~/.skillvault/vault/`.
 - Plan generation for adding, linking, unlinking, and restoring one skill.
 - Transaction lock, operation record, post-condition verification, and rollback.
 - Inventory-centric TUI with dashboard, table, detail panel, plan review, progress, and result views.
@@ -158,7 +158,7 @@ A Git-hosted skill at a repository root or explicit subdirectory resolves to a l
 
 ### Deliverables
 
-- Git repository cache (`~/.skillkeep/cache/git/`) and source resolver shelling out to system `git`.
+- Git repository cache (`~/.skillvault/cache/git/`) and source resolver shelling out to system `git`.
 - Commit SHA and normalized content hash lock entries.
 - Explicit repository subdirectory support.
 - Authentication delegated to the system Git configuration and SSH agent.
@@ -172,7 +172,7 @@ A Git-hosted skill at a repository root or explicit subdirectory resolves to a l
 - Integration tests use local temporary Git repositories, branches, commits, and subdirectories.
 - Tests prove a branch moving after lock creation does not alter synchronization output.
 - Tests prove unavailable remotes do not report a skill as current.
-- Tests prove no credentials are persisted by SkillKeep.
+- Tests prove no credentials are persisted by SkillVault.
 - A fresh temporary environment reproduces identical canonical content from the same manifest, lockfile, and accessible repository.
 
 ### Exit Criteria
@@ -252,8 +252,8 @@ Users can review and apply batch updates and ownership-aware uninstall plans wit
 - Multi-select batch plan composition.
 - Scope removal, selected-target removal, and vault deletion as separate intents.
 - Reference checks that block vault deletion while still used.
-- Default flow: SkillKeep-owned cleanup, residual scan, optional reviewed safe clean.
-- Ownership classes for SkillKeep-owned, user-owned, and unknown paths.
+- Default flow: SkillVault-owned cleanup, residual scan, optional reviewed safe clean.
+- Ownership classes for SkillVault-owned, user-owned, and unknown paths.
 - Backups and transaction rollback across batch operations.
 - Minimal headless `sync` operation with explicit non-interactive approval semantics (`--yes`).
 
@@ -317,14 +317,14 @@ The complete Windows-first MVP is recoverable, diagnosable, documented, and dist
 - Concurrency, cancellation, crash recovery, and stale-lock handling.
 - Large-inventory performance tests and responsive progress reporting.
 - Keyboard help, first-run guidance, accessibility review, and terminal compatibility matrix.
-- npm packaging polish: `npx skillkeep` first-run experience, integrity verification, and clean self-removal.
+- npm packaging polish: `npx @samlehoy/skillvault` first-run experience, integrity verification, and clean self-removal.
 - User guide for import, project sharing, provenance correction, updates, uninstall, rollback, offline use, and recovery.
 - Release checklist tied to every acceptance criterion in `PRODUCT.md`.
 
 ### Verification
 
 - End-to-end test starts from representative unmanaged installations (including a `npx skills`-built setup), imports them, synchronizes all supported targets, audits zero drift, updates a Git skill, uninstalls selected targets, and rolls back a transaction.
-- A clean machine reproduces a committed sample project's locked skill set via `npx skillkeep`.
+- A clean machine reproduces a committed sample project's locked skill set via `npx @samlehoy/skillvault`.
 - Crash-recovery tests terminate the process during mutating phases and validate the next-run recovery experience.
 - Performance targets are defined from measured representative inventories rather than guessed upfront.
 - Documentation steps are exercised on a clean Windows environment.

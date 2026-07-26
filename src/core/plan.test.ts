@@ -24,7 +24,7 @@ const linkCreate: Operation = {
   kind: "link-create",
   installationId: "opencode-global",
   path: "C:/Users/dev/.config/opencode/skills/web2md",
-  targetPath: "C:/Users/dev/.skillkeep/vault/web2md",
+  targetPath: "C:/Users/dev/.skillvault/vault/web2md",
 };
 
 describe("invertOperation", () => {
@@ -97,7 +97,7 @@ describe("createPlan", () => {
     operations: [linkCreate],
     ownership: [
       { path: linkCreate.path, ownership: "unknown" as const },
-      { path: "C:/Users/dev/.skillkeep/vault/web2md", ownership: "skillkeep-owned" as const },
+      { path: "C:/Users/dev/.skillvault/vault/web2md", ownership: "skillvault-owned" as const },
     ],
     postConditions: ["target:opencode-global/web2md linked"],
   };
@@ -111,7 +111,7 @@ describe("createPlan", () => {
       postConditions: ["target:opencode-global/web2md linked"],
       ownership: [
         { ownership: "unknown" as const, path: linkCreate.path },
-        { ownership: "skillkeep-owned" as const, path: "C:/Users/dev/.skillkeep/vault/web2md" },
+        { ownership: "skillvault-owned" as const, path: "C:/Users/dev/.skillvault/vault/web2md" },
       ],
       operations: [
         {
@@ -149,7 +149,7 @@ describe("createPlan", () => {
     expect(createPlan(withCreation).reversible).toBe(false);
   });
 
-  it("requires backups exactly for non-SkillKeep-owned affected paths", () => {
+  it("requires backups exactly for non-SkillVault-owned affected paths", () => {
     expect(createPlan(input).backupRequired).toEqual([linkCreate.path]);
   });
 });

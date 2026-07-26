@@ -27,14 +27,14 @@ const state: ActualState = {
       skillId: "code-review",
       path: "C:/work/a/.opencode/skills/code-review",
       linkState: "broken",
-      ownership: "skillkeep-owned",
+      ownership: "skillvault-owned",
     },
     {
       installationId: "opencode-global",
       skillId: "code-review",
       path: "C:/Users/dev/.config/opencode/skills/code-review",
       linkState: "linked",
-      ownership: "skillkeep-owned",
+      ownership: "skillvault-owned",
     },
     {
       installationId: "opencode-global",

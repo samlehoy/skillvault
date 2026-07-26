@@ -1,8 +1,8 @@
-# SkillKeep Architecture
+# SkillVault Architecture
 
 ## Status
 
-This document is the living source of truth for the proposed SkillKeep architecture. The implementation stack is selected (see Implementation Stack). It intentionally avoids unverified agent IDE paths and commands. Adapter-specific facts must be confirmed against an installed version or official documentation before implementation.
+This document is the living source of truth for the proposed SkillVault architecture. The implementation stack is selected (see Implementation Stack). It intentionally avoids unverified agent IDE paths and commands. Adapter-specific facts must be confirmed against an installed version or official documentation before implementation.
 
 ## Architectural Drivers
 
@@ -23,7 +23,7 @@ This document is the living source of truth for the proposed SkillKeep architect
 - **Testing:** Vitest for unit, contract, and integration tests.
 - **Git:** shell out to the system `git` executable. Authentication stays delegated to the user's Git credential helper and SSH agent; `doctor` verifies Git availability.
 - **Windows links:** directory junctions created and inspected through Node's built-in `fs` junction support; no elevation required.
-- **Distribution:** npm package (`npx skillkeep`), MIT licensed. No native binaries or code signing in the MVP.
+- **Distribution:** npm package (`npx @samlehoy/skillvault`), MIT licensed. No native binaries or code signing in the MVP.
 
 ## System Context
 
@@ -32,7 +32,7 @@ This document is the living source of truth for the proposed SkillKeep architect
                                 |
                                 v
 +----------------+      +--------------------+
-| TUI            |----->| SkillKeep core    |
+| TUI            |----->| SkillVault core    |
 | inventory      |      |                    |
 | detail         |      | discovery          |
 | plan review    |      | resolution         |
@@ -80,7 +80,7 @@ Resolution produces a deterministic effective set for a project and selected tar
 
 ### Source resolution and locking
 
-The desired-state manifest expresses intent (`.skillkeep/skills.yaml`, committed, human-edited). A separate lockfile records reproducible results (`.skillkeep/skills.lock.json`, committed, machine-written).
+The desired-state manifest expresses intent (`.skillvault/skills.yaml`, committed, human-edited). A separate lockfile records reproducible results (`.skillvault/skills.lock.json`, committed, machine-written).
 
 Conceptual manifest:
 
@@ -122,7 +122,7 @@ Conceptual lock entry:
 
 The tracked ref is used to check for updates. Installation uses the locked commit. Machine-specific absolute local paths belong in local state, not in a committed project lockfile.
 
-Private Git authentication is delegated to Git credential helpers and SSH agents. SkillKeep does not store access tokens or private keys.
+Private Git authentication is delegated to Git credential helpers and SSH agents. SkillVault does not store access tokens or private keys.
 
 ### Canonical skill model
 
@@ -215,7 +215,7 @@ No architecture can guarantee atomicity across every filesystem and external off
 
 ## Vault and Link Model
 
-Global state lives under `~/.skillkeep/`, following the dotfolder convention used by the agent IDE ecosystem itself:
+Global state lives under `~/.skillvault/`, following the dotfolder convention used by the agent IDE ecosystem itself:
 
 - `config.yaml`: global desired state and user settings.
 - `vault/`: immutable resolved skill revisions.
@@ -224,7 +224,7 @@ Global state lives under `~/.skillkeep/`, following the dotfolder convention use
 - `backups/`: pre-mutation backups and transaction records.
 - `locks/`: process locks.
 
-Project configuration lives in a committed `.skillkeep/` directory at the project root: `skills.yaml` (manifest) and `skills.lock.json` (lockfile). Machine-specific absolute paths never enter committed files.
+Project configuration lives in a committed `.skillvault/` directory at the project root: `skills.yaml` (manifest) and `skills.lock.json` (lockfile). Machine-specific absolute paths never enter committed files.
 
 On Windows, managed target directories prefer directory junctions because they usually avoid elevated symlink requirements. The filesystem abstraction must preserve link type and target identity so symbolic links can be used on supported Unix platforms later.
 
@@ -267,7 +267,7 @@ The official uninstall recipe subsystem is deferred until after the MVP; the MVP
 - Expected artifacts removed and retained.
 - Post-uninstall inspection rules.
 
-A recipe that does not match the detected installation or whose evidence is unavailable is shown as stale or inapplicable. SkillKeep then falls back to an ownership-based managed removal plan, not a guessed command.
+A recipe that does not match the detected installation or whose evidence is unavailable is shown as stale or inapplicable. SkillVault then falls back to an ownership-based managed removal plan, not a guessed command.
 
 ## Uninstall Model
 
@@ -275,7 +275,7 @@ Uninstall separates scope removal, target removal, and canonical deletion.
 
 ### Ownership classes
 
-- **SkillKeep-owned:** created by a committed SkillKeep transaction.
+- **SkillVault-owned:** created by a committed SkillVault transaction.
 - **Officially owned:** documented as belonging to the skill or target by an applicable verified adapter recipe. Not used by the MVP; requires the deferred recipe subsystem.
 - **User-owned:** known pre-existing or explicitly retained content.
 - **Unknown:** ownership cannot be established.
@@ -285,7 +285,7 @@ Uninstall separates scope removal, target removal, and canonical deletion.
 ```text
 build uninstall intent
   -> check remaining scope and target references
-  -> plan removal of SkillKeep-owned artifacts
+  -> plan removal of SkillVault-owned artifacts
   -> back up affected unmanaged content
   -> apply and verify
   -> scan residuals

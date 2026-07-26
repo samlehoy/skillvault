@@ -1,5 +1,5 @@
 {
-  "name": "skillkeep",
+  "name": "@samlehoy/skillvault",
   "version": "0.0.1",
   "description": "Local-first TUI for managing AI agent skills across agent IDEs. Pre-development placeholder.",
   "keywords": [
@@ -22,7 +22,7 @@
   "homepage": "https://github.com/samlehoy/skillvault#readme",
   "type": "module",
   "bin": {
-    "skillkeep": "bin/skillkeep.mjs"
+    "skillvault": "bin/skillvault.mjs"
   },
   "scripts": {
     "test": "vitest run",
@@ -35,6 +35,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "yaml": "^2.9.0",

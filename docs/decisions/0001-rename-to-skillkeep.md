@@ -1,6 +1,6 @@
 # ADR-0001: Rename the project from SkillVault to SkillKeep
 
-- Status: accepted
+- Status: **superseded by ADR-0006** (the project is SkillVault again; this document is retained as history)
 - Date: 2026-07-26
 
 ## Context
