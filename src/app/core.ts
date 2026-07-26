@@ -12,6 +12,7 @@ import { createPlan, type Plan, type PlanInput, type Precondition } from "../cor
 import { hashDirectory } from "../fs/hash.js";
 import { inspectPath } from "../fs/junction.js";
 import { applyPlan } from "../transaction/executor.js";
+import { findInterrupted, type JournalEntry } from "../transaction/journal.js";
 import { ingestLocalSkill } from "../vault/ingest.js";
 
 /**
@@ -90,6 +91,12 @@ export interface TuiCore {
   creatableTargets(id: string): CreatableTarget[];
   buildManagePlan(request: ManageRequest): ManageOutcome;
   applyPlan(plan: Plan): ApplyOutcome;
+  /**
+   * Transactions that crashed mid-run or failed with an incomplete
+   * rollback (persistent journal under ~/.skillvault/state). The TUI
+   * surfaces these as a recovery notice; backups are always preserved.
+   */
+  interruptedTransactions(): JournalEntry[];
 }
 
 export interface FacadeEnvironment {
@@ -111,6 +118,7 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
   const vaultRoot = path.join(skillvaultRoot, "vault");
   const backupsRoot = path.join(skillvaultRoot, "backups");
   const locksRoot = path.join(skillvaultRoot, "locks");
+  const stateRoot = path.join(skillvaultRoot, "state");
   const factsByPlan = new Map<string, readonly Precondition[]>();
 
   const discoveryEnv = {
@@ -331,6 +339,7 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     const result = applyPlan(plan, {
       backupsRoot,
       locksRoot,
+      stateRoot,
       extraFacts: factsByPlan.get(plan.id) ?? [],
     });
     if (result.ok) {
@@ -353,5 +362,6 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     creatableTargets,
     buildManagePlan,
     applyPlan: apply,
+    interruptedTransactions: () => findInterrupted(stateRoot),
   };
 }

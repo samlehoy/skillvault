@@ -386,6 +386,13 @@ export function App({ core }: { readonly core: TuiCore }) {
   const { exit } = useApp();
   const [refresh, setRefresh] = useState(0);
   const inventory = useMemo(() => core.loadInventory(), [core, refresh]);
+  const interrupted = useMemo(
+    () => core.interruptedTransactions(),
+    [core, refresh],
+  );
+  const nothingManagedYet =
+    inventory.length > 0 &&
+    !inventory.some((r) => r.locations.some((l) => l.health === "managed"));
   const [selectedRaw, setSelected] = useState(0);
   const [view, setView] = useState<View>({ name: "inventory" });
   const [filterIndex, setFilterIndex] = useState(0);
@@ -786,6 +793,25 @@ export function App({ core }: { readonly core: TuiCore }) {
       <Rule />
       <TabBar inventory={inventory} filterIndex={filterIndex} />
       <Rule />
+      {interrupted.length > 0 ? (
+        <Text>
+          {" "}
+          <Text color="red" bold>
+            ⚠ {interrupted.length} interrupted transaction
+            {interrupted.length === 1 ? "" : "s"} from an earlier run
+          </Text>
+          <Text dimColor>
+            {" — backups are preserved under ~/.skillvault/backups; run"}
+            {" skillvault doctor for details"}
+          </Text>
+        </Text>
+      ) : null}
+      {nothingManagedYet ? (
+        <Text dimColor>
+          {" ✦ First run: nothing is managed yet — select a skill and press"}
+          {" Enter to bring it under SkillVault. g groups by source repo."}
+        </Text>
+      ) : null}
       {rows.length === 0 ? (
         <Box flexDirection="column" paddingLeft={1}>
           <Text> No skills found{search.text ? ` for "${search.text}"` : ""}.</Text>

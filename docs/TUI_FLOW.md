@@ -81,6 +81,11 @@ Inline input in the key-bar row. Typing narrows the table incrementally (substri
 
 Number keys map to the targets detected on this machine, in header order. A filter narrows the table to skills present at that target; the presence matrix and copy counts still show the full picture per row. `a` returns to All. Filtering never changes the screen — no drill-down.
 
+### Notices above the table
+
+- **Recovery banner** (red): shown when the persistent transaction journal (`~/.skillvault/state/transactions/`) holds `in-progress` (crashed) or `rollback-failed` entries — backups are preserved and `skillvault doctor` lists per-plan detail.
+- **First-run hint** (dim): shown while no discovered skill is managed yet, pointing at Enter-to-manage and `g` grouping.
+
 ### Empty state
 
 ```text

@@ -91,6 +91,7 @@ const makeCore = (overrides: Partial<TuiCore> = {}): TuiCore => ({
   ),
   buildManagePlan: vi.fn(() => ({ ok: true as const, plan: samplePlan, noop: false })),
   applyPlan: vi.fn(() => ({ ok: true as const, message: "applied" })),
+  interruptedTransactions: vi.fn(() => []),
   ...overrides,
 });
 
@@ -164,6 +165,48 @@ describe("inventory", () => {
     await tick();
     expect(lastFrame()).toContain("2 skills");
     unmount();
+  });
+});
+
+describe("recovery and first-run", () => {
+  it("shows a recovery banner when interrupted transactions exist", async () => {
+    const core = makeCore({
+      interruptedTransactions: vi.fn(() => [
+        {
+          planId: "plan-crashed",
+          status: "in-progress" as const,
+          operations: [],
+          applied: [],
+          rollbackErrors: [],
+          startedAt: "2026-07-27T00:00:00.000Z",
+        },
+      ]),
+    });
+    const { lastFrame, unmount } = render(<App core={core} />);
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("interrupted transaction");
+    expect(frame).toContain("backups are preserved");
+    unmount();
+  });
+
+  it("shows the first-run hint only while nothing is managed", async () => {
+    const { lastFrame, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    expect(lastFrame()).toContain("First run");
+    unmount();
+
+    const managed: AggregatedSkillView = {
+      ...askMatt,
+      id: "kept",
+      health: "managed",
+      locations: [{ ...askMatt.locations[0]!, health: "managed" }],
+    };
+    const managedCore = makeCore({ loadInventory: () => [managed] });
+    const second = render(<App core={managedCore} />);
+    await tick();
+    expect(second.lastFrame()).not.toContain("First run");
+    second.unmount();
   });
 });
 

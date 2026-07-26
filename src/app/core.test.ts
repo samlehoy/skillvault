@@ -90,6 +90,48 @@ describe("loadInventory (aggregated)", () => {
   });
 });
 
+describe("interruptedTransactions", () => {
+  it("reports crashed runs from the persistent journal", () => {
+    const core = createTuiCore({ homeDir: home });
+    expect(core.interruptedTransactions()).toEqual([]);
+
+    const dir = path.join(home, ".skillvault", "state", "transactions");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "plan-x.json"),
+      JSON.stringify({
+        planId: "plan-x",
+        status: "in-progress",
+        operations: [],
+        applied: [],
+        rollbackErrors: [],
+        startedAt: "2026-07-27T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+    expect(core.interruptedTransactions().map((e) => e.planId)).toEqual([
+      "plan-x",
+    ]);
+  });
+
+  it("managing a skill leaves an applied journal entry behind", () => {
+    const a = makeSkill(opencodeSkills(), "journaled", "same\n");
+    const core = createTuiCore({ homeDir: home });
+    const built = core.buildManagePlan({ id: "journaled", paths: [a] });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(core.applyPlan(built.plan).ok).toBe(true);
+
+    const dir = path.join(home, ".skillvault", "state", "transactions");
+    const entries = fs.readdirSync(dir);
+    expect(entries.length).toBe(1);
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(dir, entries[0]!), "utf8"),
+    ) as { status: string };
+    expect(stored.status).toBe("applied");
+  });
+});
+
 describe("checkContent", () => {
   it("reports identical copies as identical", () => {
     makeSkill(opencodeSkills(), "same", "identical\n");

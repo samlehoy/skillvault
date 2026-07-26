@@ -30,7 +30,31 @@ describe("runDoctor", () => {
       "opencode-installation",
       "opencode-skills",
       "vault-root",
+      "transactions",
     ]);
+  });
+
+  it("fails with details when the journal holds interrupted transactions", () => {
+    const dir = path.join(home, ".skillvault", "state", "transactions");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "plan-crashed.json"),
+      JSON.stringify({
+        planId: "plan-crashed",
+        status: "in-progress",
+        operations: [{ kind: "link-create" }],
+        applied: [],
+        rollbackErrors: [],
+        startedAt: "2026-07-27T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+    const report = runDoctor({ homeDir: home, scratchDir: scratch, gitVersion: gitOk });
+    expect(report.ok).toBe(false);
+    const check = report.checks.find((c) => c.id === "transactions");
+    expect(check?.status).toBe("fail");
+    expect(check?.detail).toContain("plan-crashed");
+    expect(check?.detail).toContain("0/1 ops applied");
   });
 
   it("passes on a healthy environment with an installed OpenCode", () => {

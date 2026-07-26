@@ -11,6 +11,7 @@ import {
 import { createBackup } from "../fs/backup.js";
 import { createJunction, inspectPath, removeJunction } from "../fs/junction.js";
 import { hashDirectory } from "../fs/hash.js";
+import { writeJournalEntry, type JournalEntry } from "./journal.js";
 
 /**
  * Plan executor (ARCHITECTURE.md, "Transactions and rollback"):
@@ -58,6 +59,13 @@ export interface ExecutorEnvironment {
   readonly backupsRoot: string;
   readonly locksRoot: string;
   readonly extraFacts?: readonly Precondition[];
+  /**
+   * When set, every mutation writes a persistent journal entry here
+   * (`<stateRoot>/transactions/<planId>.json`), updated as operations
+   * apply — a crash mid-run leaves an `in-progress` entry for recovery
+   * detection. Production callers always set this.
+   */
+  readonly stateRoot?: string;
 }
 
 const SUPPORTED = new Set<Operation["kind"]>([
@@ -186,8 +194,28 @@ export function applyPlan(
     );
   }
 
+  const startedAt = new Date().toISOString();
+  const journal = (
+    status: JournalEntry["status"],
+    applied: readonly Operation[],
+    rollbackErrors: readonly string[],
+    finished: boolean,
+  ): void => {
+    if (env.stateRoot === undefined) return;
+    writeJournalEntry(env.stateRoot, {
+      planId: plan.id,
+      status,
+      operations: plan.operations,
+      applied,
+      rollbackErrors,
+      startedAt,
+      ...(finished ? { finishedAt: new Date().toISOString() } : {}),
+    });
+  };
+
   const applied: Operation[] = [];
   try {
+    journal("in-progress", applied, [], false);
     for (const operation of plan.operations) {
       const error =
         executeOperation(operation, env) ?? verifyOperation(operation);
@@ -204,6 +232,12 @@ export function applyPlan(
           const rollbackError = executeOperation(inverse, env);
           if (rollbackError !== null) rollbackErrors.push(rollbackError);
         }
+        journal(
+          rollbackErrors.length > 0 ? "rollback-failed" : "rolled-back",
+          applied,
+          rollbackErrors,
+          true,
+        );
         return failed(
           "transaction/operation-failed",
           `Operation "${operation.kind}" failed: ${error}`,
@@ -216,8 +250,10 @@ export function applyPlan(
         );
       }
       applied.push(operation);
+      journal("in-progress", applied, [], false);
     }
 
+    journal("applied", applied, [], true);
     return {
       ok: true,
       record: {

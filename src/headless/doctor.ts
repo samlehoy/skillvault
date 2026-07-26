@@ -10,6 +10,7 @@ import {
   inspectPath,
   removeJunction,
 } from "../fs/junction.js";
+import { findInterrupted } from "../transaction/journal.js";
 
 /**
  * Headless `doctor` (PRODUCT.md, "Minimal Headless Operations"): diagnoses
@@ -148,6 +149,23 @@ export function runDoctor(env: DoctorEnvironment): DoctorReport {
           id: "vault-root",
           status: "warn",
           detail: `Vault root not initialized yet (${vaultRoot} is created on first ingest).`,
+        },
+  );
+
+  const interrupted = findInterrupted(path.join(vaultRoot, "state"));
+  checks.push(
+    interrupted.length === 0
+      ? {
+          id: "transactions",
+          status: "pass",
+          detail: "No interrupted transactions in the journal.",
+        }
+      : {
+          id: "transactions",
+          status: "fail",
+          detail: `${interrupted.length} interrupted transaction(s): ${interrupted
+            .map((e) => `${e.planId} (${e.status}, ${e.applied.length}/${e.operations.length} ops applied)`)
+            .join("; ")}. Backups are preserved under ${path.join(vaultRoot, "backups")}.`,
         },
   );
 
