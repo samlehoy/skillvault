@@ -76,6 +76,35 @@ describe("loadInventory (aggregated)", () => {
     expect(rows.find((r) => r.id === "homegrown")?.bundle).toBeUndefined();
   });
 
+  it("user-asserted sources outrank installer declarations and normalize URLs", () => {
+    makeSkill(opencodeSkills(), "brainstorming");
+    makeSkill(agentsSkills(), "wrangler");
+    fs.writeFileSync(
+      path.join(home, ".agents", ".skill-lock.json"),
+      JSON.stringify({
+        version: 3,
+        skills: { wrangler: { source: "cloudflare/skills" } },
+      }),
+      "utf8",
+    );
+    const core = createTuiCore({ homeDir: home });
+
+    const assigned = core.assignSource(
+      "brainstorming",
+      "https://github.com/obra/superpowers.git",
+    );
+    expect(assigned.ok).toBe(true);
+    expect(core.assignSource("x", "   ").ok).toBe(false);
+
+    const rows = core.loadInventory();
+    const brainstorming = rows.find((r) => r.id === "brainstorming");
+    expect(brainstorming?.bundle).toBe("obra/superpowers");
+    expect(brainstorming?.bundleConfidence).toBe("user-verified");
+    const wrangler = rows.find((r) => r.id === "wrangler");
+    expect(wrangler?.bundle).toBe("cloudflare/skills");
+    expect(wrangler?.bundleConfidence).toBe("declared");
+  });
+
   it("sorts most attention-worthy first, then alphabetically", () => {
     makeSkill(opencodeSkills(), "bbb");
     const foreign = makeSkill(path.join(home, "elsewhere"), "aaa");

@@ -92,6 +92,7 @@ const makeCore = (overrides: Partial<TuiCore> = {}): TuiCore => ({
   buildManagePlan: vi.fn(() => ({ ok: true as const, plan: samplePlan, noop: false })),
   applyPlan: vi.fn(() => ({ ok: true as const, message: "applied" })),
   interruptedTransactions: vi.fn(() => []),
+  assignSource: vi.fn(() => ({ ok: true as const })),
   ...overrides,
 });
 
@@ -233,6 +234,42 @@ describe("bundle grouping", () => {
     const { lastFrame, unmount } = render(<App core={makeCore()} />);
     await tick();
     expect(lastFrame()).toContain("part of cloudflare/skills");
+    unmount();
+  });
+
+  it("s in the action panel assigns a user-verified source", async () => {
+    const core = makeCore();
+    const { lastFrame, stdin, unmount } = render(<App core={core} />);
+    await tick();
+    stdin.write("\r");
+    await tick();
+    stdin.write("s");
+    await tick();
+    expect(lastFrame()).toContain("set source repo:");
+
+    stdin.write("obra/superpowers");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(core.assignSource).toHaveBeenCalledWith("wrangler", "obra/superpowers");
+    // Back on the refreshed inventory afterwards.
+    expect(lastFrame()).toContain("2 skills");
+    unmount();
+  });
+
+  it("Esc closes the source input without assigning", async () => {
+    const core = makeCore();
+    const { lastFrame, stdin, unmount } = render(<App core={core} />);
+    await tick();
+    stdin.write("\r");
+    await tick();
+    stdin.write("s");
+    await tick();
+    stdin.write("");
+    await tick();
+    expect(lastFrame()).not.toContain("set source repo:");
+    expect(lastFrame()).toContain("Manage in which targets?");
+    expect(core.assignSource).not.toHaveBeenCalled();
     unmount();
   });
 

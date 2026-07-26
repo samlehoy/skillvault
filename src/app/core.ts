@@ -7,6 +7,7 @@ import {
   type LocationKey as SkillLocation,
 } from "../adapters/types.js";
 import { readDeclaredBundles } from "../installers/lockfiles.js";
+import { loadUserAssertions, saveUserAssertion } from "../provenance/store.js";
 import { planLinkSkill } from "../core/link-planner.js";
 import { createPlan, type Plan, type PlanInput, type Precondition } from "../core/plan.js";
 import { hashDirectory } from "../fs/hash.js";
@@ -41,12 +42,14 @@ export interface AggregatedSkillView {
   readonly locations: readonly SkillLocationView[];
   readonly targets: Readonly<Record<LocationKey, boolean>>;
   /**
-   * Declared source-repository label (e.g. "obra/superpowers") read from an
-   * installer lockfile — Declared evidence only, never a name-based guess
-   * (TUI_FLOW.md, "bundle grouping"). Absent when no lockfile mentions the
-   * skill; the TUI renders that as "(unknown source)".
+   * Source-repository label (e.g. "obra/superpowers"). Comes from a user
+   * assertion (user-verified) or an installer lockfile (Declared) — never a
+   * name-based guess (TUI_FLOW.md, "bundle grouping"). Absent when no
+   * evidence exists; the TUI renders that as "(unknown source)".
    */
   readonly bundle?: string;
+  /** Confidence behind the bundle label. */
+  readonly bundleConfidence?: "user-verified" | "declared";
 }
 
 export type ContentCheck =
@@ -97,6 +100,15 @@ export interface TuiCore {
    * surfaces these as a recovery notice; backups are always preserved.
    */
   interruptedTransactions(): JournalEntry[];
+  /**
+   * Records a user-asserted source repository for a skill (M6 editable
+   * provenance, persisted under ~/.skillvault/state/provenance.json).
+   * Accepts "owner/repo" or a full URL; enters the model as user-verified.
+   */
+  assignSource(
+    id: string,
+    repository: string,
+  ): { readonly ok: true } | { readonly ok: false; readonly message: string };
 }
 
 export interface FacadeEnvironment {
@@ -139,8 +151,10 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     // Installer lockfiles are re-read on every load: an `npx skills` run in
     // another terminal must show up on the next inventory refresh. Multiple
     // lockfiles may declare the same skill; the first in priority order
-    // (agents store, then Antigravity variants) labels the bundle.
+    // (agents store, then Antigravity variants) labels the bundle. A user
+    // assertion (editable provenance) outranks installer declarations.
     const { declared } = readDeclaredBundles({ homeDir: env.homeDir });
+    const { assertions } = loadUserAssertions(stateRoot);
     const byId = new Map<string, SkillLocationView[]>();
     const discovered = [
       ...discoverOpencodeSkills(discoveryEnv),
@@ -174,13 +188,22 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
             locations.some((location) => location.key === key),
           ]),
         ) as Record<LocationKey, boolean>;
-        const bundle = declared.get(id)?.[0]?.bundle;
+        const asserted = assertions.get(id);
+        const declaredBundle = declared.get(id)?.[0]?.bundle;
+        const bundle = asserted?.repository ?? declaredBundle;
+        const bundleConfidence =
+          asserted !== undefined
+            ? ("user-verified" as const)
+            : declaredBundle !== undefined
+              ? ("declared" as const)
+              : undefined;
         return {
           id,
           health,
           locations,
           targets,
           ...(bundle !== undefined ? { bundle } : {}),
+          ...(bundleConfidence !== undefined ? { bundleConfidence } : {}),
         };
       })
       .sort(
@@ -356,6 +379,24 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     return { ok: false, message: `${result.error.message}${rollback}` };
   };
 
+  const assignSource: TuiCore["assignSource"] = (id, repository) => {
+    // Normalize a pasted GitHub URL down to "owner/repo"; anything else is
+    // stored as typed (trimmed). Empty input is a user error, not a clear.
+    const normalized = repository
+      .trim()
+      .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+      .replace(/\.git$/i, "")
+      .replace(/^\/+|\/+$/g, "");
+    if (normalized === "") {
+      return { ok: false, message: "Source repository must not be empty." };
+    }
+    saveUserAssertion(stateRoot, id, {
+      repository: normalized,
+      assertedAt: new Date().toISOString(),
+    });
+    return { ok: true };
+  };
+
   return {
     loadInventory,
     checkContent,
@@ -363,5 +404,6 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     buildManagePlan,
     applyPlan: apply,
     interruptedTransactions: () => findInterrupted(stateRoot),
+    assignSource,
   };
 }

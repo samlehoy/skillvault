@@ -80,6 +80,8 @@ type View =
       readonly cursor: number;
       readonly canonicalPath?: string;
       readonly notice?: string;
+      /** Text of the set-source input while it is open (undefined = closed). */
+      readonly sourceInput?: string;
     }
   | {
       readonly name: "pick";
@@ -377,6 +379,7 @@ const HELP_LINES: readonly (readonly [string, string])[] = [
   ["g", "group by status / by bundle (source repository)"],
   ["space", "toggle a target checkbox (action panel)"],
   ["m", "build the consolidated plan (action panel)"],
+  ["s", "set/correct the source repo — user-verified (action panel)"],
   ["y / n", "apply / cancel in plan review — cancel changes nothing"],
   ["Esc", "back one level"],
   ["q", "quit (from the inventory only)"],
@@ -472,7 +475,28 @@ export function App({ core }: { readonly core: TuiCore }) {
     }
 
     if (view.name === "action") {
-      if (key.downArrow) {
+      if (view.sourceInput !== undefined) {
+        if (key.escape) {
+          const { sourceInput: _closed, ...rest } = view;
+          setView(rest);
+        } else if (key.return) {
+          const outcome = core.assignSource(view.skill.id, view.sourceInput);
+          if (outcome.ok) {
+            setRefresh((n) => n + 1);
+            setView({ name: "inventory" });
+          } else {
+            setView({ ...view, notice: outcome.message });
+          }
+        } else if (key.backspace || key.delete) {
+          setView({ ...view, sourceInput: view.sourceInput.slice(0, -1) });
+        } else if (input && !key.ctrl && !key.meta) {
+          setView({ ...view, sourceInput: view.sourceInput + input });
+        }
+        return;
+      }
+      if (input === "s") {
+        setView({ ...view, sourceInput: "" });
+      } else if (key.downArrow) {
         setView({
           ...view,
           cursor: Math.min(view.cursor + 1, view.entries.length - 1),
@@ -675,10 +699,26 @@ export function App({ core }: { readonly core: TuiCore }) {
           <Text>
             {" "}
             <Text color="magenta">▣ part of {view.skill.bundle}</Text>
+            {view.skill.bundleConfidence !== undefined ? (
+              <Text dimColor> ({view.skill.bundleConfidence})</Text>
+            ) : null}
             <Text dimColor>
               {" — "}
               {bundleSize} skill{bundleSize === 1 ? "" : "s"} from this bundle
               {" · whole-bundle apply arrives with batch support"}
+            </Text>
+          </Text>
+        ) : null}
+        {view.sourceInput !== undefined ? (
+          <Text>
+            {" "}
+            <Text bold color="magenta">
+              set source repo:
+            </Text>
+            <Text> {view.sourceInput}</Text>
+            <Text inverse> </Text>
+            <Text dimColor>
+              {"  (owner/repo or URL · Enter save · Esc cancel)"}
             </Text>
           </Text>
         ) : null}
@@ -707,6 +747,7 @@ export function App({ core }: { readonly core: TuiCore }) {
           keys={[
             ["space", "toggle"],
             ["m", "build plan"],
+            ["s", "set source"],
             ["Esc", "back"],
           ]}
         />
