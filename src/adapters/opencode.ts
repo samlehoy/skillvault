@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { inspectPath } from "../fs/junction.js";
+import type { DiscoveredSkill, LocationKey } from "./types.js";
 
 /**
  * OpenCode reference adapter — read-only discovery.
@@ -24,18 +25,8 @@ export interface OpenCodeInstallation {
   readonly present: boolean;
 }
 
-export type SkillLocation = "opencode" | "claude-external" | "agents-external";
-
-export interface DiscoveredSkill {
-  readonly id: string;
-  readonly path: string;
-  readonly scope: "global" | "project";
-  readonly location: SkillLocation;
-  readonly entryKind: "directory" | "junction";
-  readonly junctionTarget?: string;
-  readonly dangling: boolean;
-  readonly hasSkillMd: boolean;
-}
+export type { DiscoveredSkill } from "./types.js";
+export type SkillLocation = LocationKey;
 
 export function discoverInstallation(
   env: OpenCodeEnvironment,
@@ -51,7 +42,7 @@ export function discoverInstallation(
 interface SearchRoot {
   readonly dir: string;
   readonly scope: "global" | "project";
-  readonly location: SkillLocation;
+  readonly location: LocationKey;
 }
 
 function searchRoots(env: OpenCodeEnvironment): SearchRoot[] {
@@ -80,11 +71,12 @@ function searchRoots(env: OpenCodeEnvironment): SearchRoot[] {
   return roots;
 }
 
-const LOCATION_ORDER: Record<SkillLocation, number> = {
+const LOCATION_ORDER: Partial<Record<LocationKey, number>> = {
   opencode: 0,
   "claude-external": 1,
   "agents-external": 2,
 };
+const orderOf = (key: LocationKey): number => LOCATION_ORDER[key] ?? 99;
 
 export function discoverSkills(env: OpenCodeEnvironment): DiscoveredSkill[] {
   const found: DiscoveredSkill[] = [];
@@ -118,7 +110,7 @@ export function discoverSkills(env: OpenCodeEnvironment): DiscoveredSkill[] {
   return found.sort(
     (a, b) =>
       a.scope.localeCompare(b.scope) ||
-      LOCATION_ORDER[a.location] - LOCATION_ORDER[b.location] ||
+      orderOf(a.location) - orderOf(b.location) ||
       a.id.localeCompare(b.id) ||
       a.path.localeCompare(b.path),
   );

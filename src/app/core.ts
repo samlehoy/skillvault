@@ -1,5 +1,11 @@
 import path from "node:path";
-import { discoverSkills, type DiscoveredSkill, type SkillLocation } from "../adapters/opencode.js";
+import { discoverSkills as discoverAntigravitySkills } from "../adapters/antigravity.js";
+import { discoverSkills as discoverOpencodeSkills } from "../adapters/opencode.js";
+import {
+  LOCATION_KEYS_ORDERED,
+  type DiscoveredSkill,
+  type LocationKey as SkillLocation,
+} from "../adapters/types.js";
 import { planLinkSkill } from "../core/link-planner.js";
 import { createPlan, type Plan, type PlanInput, type Precondition } from "../core/plan.js";
 import { hashDirectory } from "../fs/hash.js";
@@ -90,11 +96,7 @@ const HEALTH_SEVERITY: Record<Health, number> = {
   managed: 0,
 };
 
-const LOCATION_KEYS: readonly LocationKey[] = [
-  "opencode",
-  "claude-external",
-  "agents-external",
-];
+const LOCATION_KEYS: readonly LocationKey[] = LOCATION_KEYS_ORDERED;
 
 export function createTuiCore(env: FacadeEnvironment): TuiCore {
   const skillvaultRoot = path.join(env.homeDir, ".skillvault");
@@ -119,7 +121,11 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
 
   const loadInventory = (): AggregatedSkillView[] => {
     const byId = new Map<string, SkillLocationView[]>();
-    for (const skill of discoverSkills(discoveryEnv)) {
+    const discovered = [
+      ...discoverOpencodeSkills(discoveryEnv),
+      ...discoverAntigravitySkills({ homeDir: env.homeDir }),
+    ];
+    for (const skill of discovered) {
       const view: SkillLocationView = {
         key: skill.location,
         scope: skill.scope,
@@ -196,7 +202,8 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
       });
     }
     // agents-external is the npx-skills store; SkillVault never writes into
-    // it (ADR-0005), so it is intentionally not creatable.
+    // it (ADR-0005). Antigravity variants stay non-creatable until live
+    // junction consumption by its loader is verified (M0 pending fact).
     return creatable;
   };
 

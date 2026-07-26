@@ -47,16 +47,22 @@ const HEALTH_STYLE: Record<
 
 const LOCATION_KEYS: readonly LocationKey[] = [
   "opencode",
+  "antigravity",
+  "antigravity-ide",
   "claude-external",
   "agents-external",
 ];
 const LOCATION_LABEL: Record<LocationKey, string> = {
   opencode: "opencode",
+  antigravity: "antigrav",
+  "antigravity-ide": "antigrav-ide",
   "claude-external": "claude",
   "agents-external": "agents",
 };
 const LOCATION_CODE: Record<LocationKey, string> = {
   opencode: "oc",
+  antigravity: "av",
+  "antigravity-ide": "ai",
   "claude-external": "cl",
   "agents-external": "ag",
 };
@@ -282,7 +288,7 @@ const HELP_LINES: readonly (readonly [string, string])[] = [
   ["↑ ↓", "move selection"],
   ["Enter", "open the action panel for the selected skill"],
   ["/", "incremental search (Esc clears)"],
-  ["a, 1-3", "filter by target"],
+  ["a, 1-5", "filter by target"],
   ["space", "toggle a target checkbox (action panel)"],
   ["m", "build the consolidated plan (action panel)"],
   ["y / n", "apply / cancel in plan review — cancel changes nothing"],
@@ -695,7 +701,7 @@ export function App({ core }: { readonly core: TuiCore }) {
           ["↑↓", "select"],
           ["Enter", "manage"],
           ["/", "search"],
-          ["a,1-3", "filter"],
+          ["a,1-5", "filter"],
           ["?", "help"],
           ["q", "quit"],
         ]}

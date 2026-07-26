@@ -31,7 +31,13 @@ const wrangler: AggregatedSkillView = {
       health: "unmanaged",
     },
   ],
-  targets: { opencode: true, "claude-external": false, "agents-external": true },
+  targets: {
+    opencode: true,
+    antigravity: false,
+    "antigravity-ide": false,
+    "claude-external": false,
+    "agents-external": true,
+  },
 };
 
 const askMatt: AggregatedSkillView = {
@@ -46,7 +52,13 @@ const askMatt: AggregatedSkillView = {
       health: "external",
     },
   ],
-  targets: { opencode: false, "claude-external": true, "agents-external": false },
+  targets: {
+    opencode: false,
+    antigravity: false,
+    "antigravity-ide": false,
+    "claude-external": true,
+    "agents-external": false,
+  },
 };
 
 const samplePlan: Plan = createPlan({
@@ -87,8 +99,8 @@ describe("inventory", () => {
     await tick();
     const frame = lastFrame() ?? "";
     expect(frame).toContain("2 skills");
-    expect(frame).toMatch(/wrangler.+oc✓ cl– ag✓.+2 copies/);
-    expect(frame).toMatch(/ask-matt.+oc– cl✓ ag–/);
+    expect(frame).toMatch(/wrangler.+oc✓ av– ai– cl– ag✓.+2 copies/);
+    expect(frame).toMatch(/ask-matt.+oc– av– ai– cl✓ ag–/);
     unmount();
   });
 
@@ -106,7 +118,7 @@ describe("inventory", () => {
   it("filters by target with number keys and resets with a", async () => {
     const { lastFrame, stdin, unmount } = render(<App core={makeCore()} />);
     await tick();
-    stdin.write("2");
+    stdin.write("4");
     await tick();
     let frame = lastFrame() ?? "";
     expect(frame).toContain("ask-matt");
@@ -350,6 +362,8 @@ describe("viewport", () => {
       ],
       targets: {
         opencode: true,
+        antigravity: false,
+        "antigravity-ide": false,
         "claude-external": false,
         "agents-external": false,
       },
