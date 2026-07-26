@@ -1,33 +1,100 @@
 import path from "node:path";
-import { discoverSkills } from "../adapters/opencode.js";
+import { discoverSkills, type DiscoveredSkill, type SkillLocation } from "../adapters/opencode.js";
 import { planLinkSkill } from "../core/link-planner.js";
-import type { Plan, Precondition } from "../core/plan.js";
+import { createPlan, type Plan, type PlanInput, type Precondition } from "../core/plan.js";
+import { hashDirectory } from "../fs/hash.js";
 import { inspectPath } from "../fs/junction.js";
-import type {
-  ApplyOutcome,
-  InventoryRow,
-  PlanBuildOutcome,
-  TuiCore,
-} from "../tui/app.js";
 import { applyPlan } from "../transaction/executor.js";
 import { ingestLocalSkill } from "../vault/ingest.js";
 
 /**
- * The real TuiCore facade: wires OpenCode discovery, vault ingestion, the
- * link planner, and the transaction executor into the typed surface the TUI
- * consumes. This module owns the ~/.skillvault layout; the TUI never sees a
- * path decision.
- *
- * "Manage this skill" (buildLinkPlan) means: ingest the discovered content
- * into the vault (idempotent for identical content), then plan replacing the
- * discovered location with a managed junction — evacuating unmanaged content
- * to backup storage first.
+ * Skill-first TuiCore facade (docs/TUI_FLOW.md): one row per canonical skill
+ * ID aggregating every physical location, a lazy content-conflict check, and
+ * consolidated multi-location manage plans. This module owns the
+ * ~/.skillvault layout and all path derivation; the TUI never computes a
+ * path.
  */
+
+export type Health = "managed" | "external" | "broken" | "unmanaged";
+
+export type LocationKey = SkillLocation;
+
+export interface SkillLocationView {
+  readonly key: LocationKey;
+  readonly scope: "global" | "project";
+  readonly path: string;
+  readonly entryKind: "directory" | "junction";
+  readonly health: Health;
+}
+
+export interface AggregatedSkillView {
+  readonly id: string;
+  readonly health: Health;
+  readonly locations: readonly SkillLocationView[];
+  readonly targets: Readonly<Record<LocationKey, boolean>>;
+}
+
+export type ContentCheck =
+  | { readonly identical: true }
+  | {
+      readonly identical: false;
+      readonly options: readonly {
+        readonly key: LocationKey;
+        readonly path: string;
+        readonly hashShort: string;
+      }[];
+    };
+
+export interface CreatableTarget {
+  readonly key: LocationKey;
+  readonly path: string;
+}
+
+export interface ManageRequest {
+  readonly id: string;
+  /** Existing locations to convert into managed junctions. */
+  readonly paths: readonly string[];
+  /** Targets where the skill does not exist yet and a link is created. */
+  readonly createKeys?: readonly LocationKey[];
+  /** Required when the copies differ in content. */
+  readonly canonicalPath?: string;
+}
+
+export type ManageOutcome =
+  | { readonly ok: true; readonly plan: Plan; readonly noop: boolean }
+  | { readonly ok: false; readonly code: "conflict"; readonly options: Extract<ContentCheck, { identical: false }>["options"] }
+  | { readonly ok: false; readonly code: "error"; readonly message: string };
+
+export interface ApplyOutcome {
+  readonly ok: boolean;
+  readonly message: string;
+}
+
+export interface TuiCore {
+  loadInventory(): AggregatedSkillView[];
+  checkContent(id: string): ContentCheck;
+  creatableTargets(id: string): CreatableTarget[];
+  buildManagePlan(request: ManageRequest): ManageOutcome;
+  applyPlan(plan: Plan): ApplyOutcome;
+}
 
 export interface FacadeEnvironment {
   readonly homeDir: string;
   readonly projectDir?: string;
 }
+
+const HEALTH_SEVERITY: Record<Health, number> = {
+  broken: 3,
+  unmanaged: 2,
+  external: 1,
+  managed: 0,
+};
+
+const LOCATION_KEYS: readonly LocationKey[] = [
+  "opencode",
+  "claude-external",
+  "agents-external",
+];
 
 export function createTuiCore(env: FacadeEnvironment): TuiCore {
   const skillvaultRoot = path.join(env.homeDir, ".skillvault");
@@ -41,35 +108,127 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     ...(env.projectDir !== undefined ? { projectDir: env.projectDir } : {}),
   };
 
-  const loadInventory = (): InventoryRow[] =>
-    discoverSkills(discoveryEnv).map((skill) => {
-      const health =
-        skill.dangling
-          ? "broken"
-          : skill.entryKind === "junction"
-            ? skill.junctionTarget?.startsWith(vaultRoot)
-              ? "managed"
-              : "external"
-            : "unmanaged";
-      return {
-        id: skill.id,
-        scope: skill.scope,
-        location: skill.location,
-        health,
-        path: skill.path,
-      };
-    });
+  const locationHealth = (skill: DiscoveredSkill): Health =>
+    skill.dangling
+      ? "broken"
+      : skill.entryKind === "junction"
+        ? skill.junctionTarget?.startsWith(vaultRoot)
+          ? "managed"
+          : "external"
+        : "unmanaged";
 
-  const buildLinkPlan = (skillId: string): PlanBuildOutcome => {
-    const skill = discoverSkills(discoveryEnv).find((s) => s.id === skillId);
+  const loadInventory = (): AggregatedSkillView[] => {
+    const byId = new Map<string, SkillLocationView[]>();
+    for (const skill of discoverSkills(discoveryEnv)) {
+      const view: SkillLocationView = {
+        key: skill.location,
+        scope: skill.scope,
+        path: skill.path,
+        entryKind: skill.entryKind,
+        health: locationHealth(skill),
+      };
+      const list = byId.get(skill.id) ?? [];
+      list.push(view);
+      byId.set(skill.id, list);
+    }
+
+    return [...byId.entries()]
+      .map(([id, locations]) => {
+        const health = locations.reduce<Health>(
+          (worst, location) =>
+            HEALTH_SEVERITY[location.health] > HEALTH_SEVERITY[worst]
+              ? location.health
+              : worst,
+          "managed",
+        );
+        const targets = Object.fromEntries(
+          LOCATION_KEYS.map((key) => [
+            key,
+            locations.some((location) => location.key === key),
+          ]),
+        ) as Record<LocationKey, boolean>;
+        return { id, health, locations, targets };
+      })
+      .sort(
+        (a, b) =>
+          HEALTH_SEVERITY[b.health] - HEALTH_SEVERITY[a.health] ||
+          a.id.localeCompare(b.id),
+      );
+  };
+
+  const findSkill = (id: string): AggregatedSkillView | undefined =>
+    loadInventory().find((row) => row.id === id);
+
+  const checkContent = (id: string): ContentCheck => {
+    const skill = findSkill(id);
+    if (!skill) return { identical: true };
+
+    const options = skill.locations
+      .filter((location) => location.health !== "broken")
+      .map((location) => {
+        const hash = hashDirectory(location.path);
+        return {
+          key: location.key,
+          path: location.path,
+          hashShort: hash.ok ? hash.hash.slice(7, 19) : "unreadable",
+        };
+      });
+    const distinct = new Set(options.map((option) => option.hashShort));
+    return distinct.size <= 1
+      ? { identical: true }
+      : { identical: false, options };
+  };
+
+  const creatableTargets = (id: string): CreatableTarget[] => {
+    const skill = findSkill(id);
+    if (!skill) return [];
+    const creatable: CreatableTarget[] = [];
+    if (!skill.targets["opencode"]) {
+      creatable.push({
+        key: "opencode",
+        path: path.join(env.homeDir, ".config", "opencode", "skills", id),
+      });
+    }
+    if (!skill.targets["claude-external"]) {
+      creatable.push({
+        key: "claude-external",
+        path: path.join(env.homeDir, ".claude", "skills", id),
+      });
+    }
+    // agents-external is the npx-skills store; SkillVault never writes into
+    // it (ADR-0005), so it is intentionally not creatable.
+    return creatable;
+  };
+
+  const buildManagePlan = (request: ManageRequest): ManageOutcome => {
+    const skill = findSkill(request.id);
     if (!skill) {
-      return { ok: false, message: `No discovered skill named "${skillId}".` };
+      return {
+        ok: false,
+        code: "error",
+        message: `No discovered skill named "${request.id}".`,
+      };
+    }
+
+    const check = checkContent(request.id);
+    let canonicalPath = request.canonicalPath;
+    if (!check.identical && canonicalPath === undefined) {
+      return { ok: false, code: "conflict", options: check.options };
+    }
+    canonicalPath ??=
+      skill.locations.find((location) => location.health !== "broken")?.path;
+    if (canonicalPath === undefined) {
+      return {
+        ok: false,
+        code: "error",
+        message: `No readable copy of "${request.id}" exists to ingest.`,
+      };
     }
 
     const ingested = ingestLocalSkill({
-      sourceDir: skill.path,
+      sourceDir: canonicalPath,
       vaultRoot,
-      id: skill.id,
+      id: request.id,
     });
     if (!ingested.ok) {
       const causes = ingested.error.causes
@@ -77,27 +236,68 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
         .join("; ");
       return {
         ok: false,
+        code: "error",
         message: `${ingested.error.message}${causes ? ` (${causes})` : ""}`,
       };
     }
 
-    const inspection = inspectPath(skill.path);
-    const built = planLinkSkill({
-      entry: ingested.entry,
-      installationId: `opencode:${skill.scope}`,
-      target: {
-        path: skill.path,
-        inspection,
-        ownership:
-          inspection.kind === "junction" ? "skillvault-owned" : "user-owned",
-      },
-    });
-    if (!built.ok) return { ok: false, message: built.error.message };
+    const creatable = creatableTargets(request.id);
+    const linkTargets: { path: string; installationId: string }[] = [
+      ...request.paths.map((p) => ({ path: p, installationId: "opencode:global" })),
+      ...(request.createKeys ?? []).flatMap((key) => {
+        const target = creatable.find((t) => t.key === key);
+        return target
+          ? [{ path: target.path, installationId: `${key}:global` }]
+          : [];
+      }),
+    ];
 
-    factsByPlan.set(built.plan.id, [
+    const combined: PlanInput = {
+      preconditions: [],
+      operations: [],
+      ownership: [],
+      postConditions: [],
+    };
+    const preconditions = new Map<string, string>();
+    const operations: PlanInput["operations"][number][] = [];
+    const ownership: PlanInput["ownership"][number][] = [];
+    const postConditions: string[] = [];
+
+    for (const target of linkTargets) {
+      const inspection = inspectPath(target.path);
+      const built = planLinkSkill({
+        entry: ingested.entry,
+        installationId: target.installationId,
+        target: {
+          path: target.path,
+          inspection,
+          ownership:
+            inspection.kind === "junction" ? "skillvault-owned" : "user-owned",
+        },
+      });
+      if (!built.ok) {
+        return { ok: false, code: "error", message: built.error.message };
+      }
+      for (const p of built.plan.preconditions) preconditions.set(p.key, p.value);
+      operations.push(...built.plan.operations);
+      ownership.push(...built.plan.ownership);
+      postConditions.push(...built.plan.postConditions);
+    }
+
+    const plan = createPlan({
+      ...combined,
+      preconditions: [...preconditions.entries()].map(([key, value]) => ({
+        key,
+        value,
+      })),
+      operations,
+      ownership,
+      postConditions,
+    });
+    factsByPlan.set(plan.id, [
       { key: `vault:${ingested.entry.id}`, value: ingested.entry.contentHash },
     ]);
-    return built;
+    return { ok: true, plan, noop: operations.length === 0 };
   };
 
   const apply = (plan: Plan): ApplyOutcome => {
@@ -120,5 +320,11 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     return { ok: false, message: `${result.error.message}${rollback}` };
   };
 
-  return { loadInventory, buildLinkPlan, applyPlan: apply };
+  return {
+    loadInventory,
+    checkContent,
+    creatableTargets,
+    buildManagePlan,
+    applyPlan: apply,
+  };
 }

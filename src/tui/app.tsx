@@ -1,43 +1,23 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useMemo, useState } from "react";
+import type {
+  AggregatedSkillView,
+  ApplyOutcome,
+  ContentCheck,
+  Health,
+  LocationKey,
+  TuiCore,
+} from "../app/core.js";
 import type { Plan } from "../core/plan.js";
 
 /**
- * Inventory-centric TUI (PRODUCT.md, "TUI-first management").
- *
- * Components never touch the filesystem or compute effective state: every
- * capability arrives through the injected {@link TuiCore} facade as typed
- * requests and responses, so cancelling a plan review provably performs no
+ * Skill-first inventory TUI (docs/TUI_FLOW.md). Components never touch the
+ * filesystem or compute paths: every capability arrives through the injected
+ * {@link TuiCore} facade, so cancelling a plan review provably performs no
  * mutation — the facade is simply never called.
- *
- * Keys: up/down select, l = plan link for the selected skill,
- * y/n = apply/cancel inside plan review, q = quit.
  */
 
-export type Health = "managed" | "external" | "broken" | "unmanaged";
-
-export interface InventoryRow {
-  readonly id: string;
-  readonly scope: string;
-  readonly location: string;
-  readonly health: Health;
-  readonly path: string;
-}
-
-export type PlanBuildOutcome =
-  | { readonly ok: true; readonly plan: Plan; readonly noop: boolean }
-  | { readonly ok: false; readonly message: string };
-
-export interface ApplyOutcome {
-  readonly ok: boolean;
-  readonly message: string;
-}
-
-export interface TuiCore {
-  loadInventory(): InventoryRow[];
-  buildLinkPlan(skillId: string): PlanBuildOutcome;
-  applyPlan(plan: Plan): ApplyOutcome;
-}
+export type { AggregatedSkillView, ApplyOutcome, Health, TuiCore } from "../app/core.js";
 
 const HEALTH_STYLE: Record<
   Health,
@@ -61,16 +41,56 @@ const HEALTH_STYLE: Record<
   unmanaged: {
     color: "cyan",
     symbol: "○",
-    meaning: "plain folder, not yet managed — press l to manage",
+    meaning: "plain folder, not yet managed — press Enter to manage",
   },
+};
+
+const LOCATION_KEYS: readonly LocationKey[] = [
+  "opencode",
+  "claude-external",
+  "agents-external",
+];
+const LOCATION_LABEL: Record<LocationKey, string> = {
+  opencode: "opencode",
+  "claude-external": "claude",
+  "agents-external": "agents",
+};
+const LOCATION_CODE: Record<LocationKey, string> = {
+  opencode: "oc",
+  "claude-external": "cl",
+  "agents-external": "ag",
 };
 
 const VISIBLE_ROWS = 12;
 
+interface PanelEntry {
+  readonly kind: "existing" | "create";
+  readonly key: LocationKey;
+  readonly path: string;
+  readonly checked: boolean;
+}
+
+type ConflictOptions = Extract<ContentCheck, { identical: false }>["options"];
+
 type View =
   | { readonly name: "inventory" }
-  | { readonly name: "plan-review"; readonly plan: Plan }
-  | { readonly name: "result"; readonly outcome: ApplyOutcome };
+  | {
+      readonly name: "action";
+      readonly skill: AggregatedSkillView;
+      readonly entries: readonly PanelEntry[];
+      readonly cursor: number;
+      readonly canonicalPath?: string;
+      readonly notice?: string;
+    }
+  | {
+      readonly name: "pick";
+      readonly skill: AggregatedSkillView;
+      readonly options: ConflictOptions;
+      readonly cursor: number;
+    }
+  | { readonly name: "plan"; readonly plan: Plan }
+  | { readonly name: "result"; readonly outcome: ApplyOutcome }
+  | { readonly name: "help" };
 
 function operationParts(
   operation: Plan["operations"][number],
@@ -101,18 +121,36 @@ function operationParts(
   }
 }
 
-function Header({ total }: { readonly total?: number }) {
+function Header({
+  total,
+  filterIndex,
+}: {
+  readonly total?: number;
+  readonly filterIndex?: number;
+}) {
   return (
-    <Text>
-      <Text bold color="magenta">
-        {" ⬢ SkillVault "}
+    <Box justifyContent="space-between">
+      <Text>
+        <Text bold color="magenta">
+          {" ⬢ SkillVault "}
+        </Text>
+        {total !== undefined ? <Text dimColor>· {total} skills</Text> : null}
       </Text>
-      {total !== undefined ? <Text dimColor>· {total} skills</Text> : null}
-    </Text>
+      {filterIndex !== undefined ? (
+        <Text>
+          <Text inverse={filterIndex === 0}>[a All]</Text>
+          {LOCATION_KEYS.map((key, index) => (
+            <Text key={key} inverse={filterIndex === index + 1}>
+              {` [${index + 1} ${LOCATION_LABEL[key]}]`}
+            </Text>
+          ))}
+        </Text>
+      ) : null}
+    </Box>
   );
 }
 
-function Legend({ inventory }: { readonly inventory: InventoryRow[] }) {
+function Legend({ inventory }: { readonly inventory: readonly AggregatedSkillView[] }) {
   const counts = useMemo(() => {
     const byHealth: Partial<Record<Health, number>> = {};
     for (const row of inventory) {
@@ -144,19 +182,25 @@ function Rule() {
   return <Text dimColor>{"─".repeat(78)}</Text>;
 }
 
+function matrixFor(skill: AggregatedSkillView): string {
+  return LOCATION_KEYS.map(
+    (key) => `${LOCATION_CODE[key]}${skill.targets[key] ? "✓" : "–"}`,
+  ).join(" ");
+}
+
 function InventoryTable({
-  inventory,
+  rows,
   selected,
 }: {
-  readonly inventory: InventoryRow[];
+  readonly rows: readonly AggregatedSkillView[];
   readonly selected: number;
 }) {
   const start = Math.max(
     0,
-    Math.min(selected - Math.floor(VISIBLE_ROWS / 2), inventory.length - VISIBLE_ROWS),
+    Math.min(selected - Math.floor(VISIBLE_ROWS / 2), rows.length - VISIBLE_ROWS),
   );
-  const end = Math.min(inventory.length, start + VISIBLE_ROWS);
-  const window = inventory.slice(start, end);
+  const end = Math.min(rows.length, start + VISIBLE_ROWS);
+  const window = rows.slice(start, end);
 
   return (
     <Box flexDirection="column">
@@ -165,45 +209,55 @@ function InventoryTable({
         const index = start + offset;
         const isSelected = index === selected;
         const style = HEALTH_STYLE[row.health];
-        const cells = `${style.symbol} ${row.health.padEnd(10)} ${row.id.padEnd(28)} `;
+        const copies =
+          row.locations.length > 1 ? `${row.locations.length} copies` : "";
+        const cells = `${style.symbol} ${row.id.padEnd(28)} ${matrixFor(row)}   ${copies}`;
         return isSelected ? (
-          <Text key={row.path} inverse bold>
-            {`❯ ${cells}${row.scope} · ${row.location}`}
+          <Text key={row.id} inverse bold>
+            {`❯ ${cells}`}
           </Text>
         ) : (
-          <Text key={row.path}>
+          <Text key={row.id}>
             {"  "}
-            <Text color={style.color}>{cells}</Text>
-            <Text dimColor>{`${row.scope} · ${row.location}`}</Text>
+            <Text color={style.color}>{`${style.symbol} `}</Text>
+            <Text>{`${row.id.padEnd(28)} `}</Text>
+            <Text dimColor>{`${matrixFor(row)}   ${copies}`}</Text>
           </Text>
         );
       })}
-      {end < inventory.length ? (
-        <Text dimColor>{`   ↓ ${inventory.length - end} more`}</Text>
+      {end < rows.length ? (
+        <Text dimColor>{`   ↓ ${rows.length - end} more`}</Text>
       ) : null}
     </Box>
   );
 }
 
-function DetailPanel({ row }: { readonly row: InventoryRow }) {
-  const style = HEALTH_STYLE[row.health];
+function DetailPanel({ skill }: { readonly skill: AggregatedSkillView }) {
   return (
     <Box flexDirection="column" paddingLeft={1}>
       <Text>
-        <Text bold>{row.id}</Text>
-        {"  "}
-        <Text color={style.color}>
-          {style.symbol} {row.health}
+        <Text bold>{skill.id}</Text>
+        {" — found in "}
+        {skill.locations.length} location{skill.locations.length === 1 ? "" : "s"}:
+      </Text>
+      {skill.locations.map((location) => (
+        <Text key={location.path}>
+          {"  "}
+          <Text color={HEALTH_STYLE[location.health].color}>
+            {LOCATION_LABEL[location.key].padEnd(9)}
+          </Text>
+          <Text>{location.path}</Text>
+          <Text dimColor>
+            {"  ("}
+            {location.entryKind === "junction"
+              ? "junction"
+              : location.key === "agents-external"
+                ? "store"
+                : "copy"}
+            {")"}
+          </Text>
         </Text>
-      </Text>
-      <Text>
-        <Text dimColor>{"path   "}</Text>
-        {row.path}
-      </Text>
-      <Text>
-        <Text dimColor>{"where  "}</Text>
-        {row.scope} · {row.location}
-      </Text>
+      ))}
     </Box>
   );
 }
@@ -224,84 +278,138 @@ function KeyBar({ keys }: { readonly keys: readonly (readonly [string, string])[
   );
 }
 
-function PlanReview({ plan }: { readonly plan: Plan }) {
-  return (
-    <Box flexDirection="column">
-      <Header />
-      <Rule />
-      <Text>
-        {" "}
-        <Text bold>Plan review</Text>
-        {"  "}
-        <Text dimColor>{plan.id.slice(0, 21)}…</Text>
-      </Text>
-      <Box
-        borderStyle="round"
-        borderColor="cyan"
-        flexDirection="column"
-        paddingX={1}
-        marginX={1}
-      >
-        {plan.operations.length === 0 ? (
-          <Text dimColor>No operations — already in the desired state.</Text>
-        ) : (
-          plan.operations.map((operation, index) => {
-            const parts = operationParts(operation);
-            return (
-              <Text key={index}>
-                <Text bold color={parts.color}>
-                  {parts.verb.padEnd(13)}
-                </Text>
-                <Text>{parts.detail}</Text>
-              </Text>
-            );
-          })
-        )}
-      </Box>
-      {plan.backupRequired.length > 0 ? (
-        <Text>
-          {" "}
-          <Text color="yellow">⚠ backs up first:</Text>{" "}
-          <Text dimColor>{plan.backupRequired.join(", ")}</Text>
-        </Text>
-      ) : null}
-      <Rule />
-      <KeyBar
-        keys={[
-          ["y", "apply"],
-          ["n", "cancel — no changes"],
-        ]}
-      />
-    </Box>
-  );
-}
-
-function ResultView({ outcome }: { readonly outcome: ApplyOutcome }) {
-  return (
-    <Box flexDirection="column">
-      <Header />
-      <Rule />
-      <Box paddingLeft={1} flexDirection="column">
-        <Text bold color={outcome.ok ? "green" : "red"}>
-          {outcome.ok ? "✔ Success" : "✖ Failed"}
-        </Text>
-        <Text>{outcome.message}</Text>
-      </Box>
-      <Rule />
-      <KeyBar keys={[["any key", "back to inventory"]]} />
-    </Box>
-  );
-}
+const HELP_LINES: readonly (readonly [string, string])[] = [
+  ["↑ ↓", "move selection"],
+  ["Enter", "open the action panel for the selected skill"],
+  ["/", "incremental search (Esc clears)"],
+  ["a, 1-3", "filter by target"],
+  ["space", "toggle a target checkbox (action panel)"],
+  ["m", "build the consolidated plan (action panel)"],
+  ["y / n", "apply / cancel in plan review — cancel changes nothing"],
+  ["Esc", "back one level"],
+  ["q", "quit (from the inventory only)"],
+];
 
 export function App({ core }: { readonly core: TuiCore }) {
   const { exit } = useApp();
-  const inventory = useMemo(() => core.loadInventory(), [core]);
-  const [selected, setSelected] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const inventory = useMemo(() => core.loadInventory(), [core, refresh]);
+  const [selectedRaw, setSelected] = useState(0);
   const [view, setView] = useState<View>({ name: "inventory" });
+  const [filterIndex, setFilterIndex] = useState(0);
+  const [search, setSearch] = useState({ active: false, text: "" });
   const [notice, setNotice] = useState<string | null>(null);
 
+  const rows = useMemo(() => {
+    const filterKey =
+      filterIndex > 0 ? LOCATION_KEYS[filterIndex - 1] : undefined;
+    return inventory.filter(
+      (row) =>
+        (filterKey === undefined || row.targets[filterKey]) &&
+        (search.text === "" || row.id.includes(search.text)),
+    );
+  }, [inventory, filterIndex, search.text]);
+  const selected = Math.min(selectedRaw, Math.max(0, rows.length - 1));
+
+  const openActionPanel = (
+    skill: AggregatedSkillView,
+    canonicalPath?: string,
+  ): void => {
+    const entries: PanelEntry[] = [
+      ...skill.locations.map((location) => ({
+        kind: "existing" as const,
+        key: location.key,
+        path: location.path,
+        checked: true,
+      })),
+      ...core.creatableTargets(skill.id).map((target) => ({
+        kind: "create" as const,
+        key: target.key,
+        path: target.path,
+        checked: false,
+      })),
+    ];
+    setView({
+      name: "action",
+      skill,
+      entries,
+      cursor: 0,
+      ...(canonicalPath !== undefined ? { canonicalPath } : {}),
+    });
+  };
+
   useInput((input, key) => {
-    if (view.name === "plan-review") {
+    if (view.name === "help") {
+      setView({ name: "inventory" });
+      return;
+    }
+
+    if (view.name === "pick") {
+      if (key.downArrow) {
+        setView({
+          ...view,
+          cursor: Math.min(view.cursor + 1, view.options.length - 1),
+        });
+      } else if (key.upArrow) {
+        setView({ ...view, cursor: Math.max(view.cursor - 1, 0) });
+      } else if (key.return) {
+        const option = view.options[view.cursor];
+        if (option) openActionPanel(view.skill, option.path);
+      } else if (key.escape) {
+        setView({ name: "inventory" });
+      }
+      return;
+    }
+
+    if (view.name === "action") {
+      if (key.downArrow) {
+        setView({
+          ...view,
+          cursor: Math.min(view.cursor + 1, view.entries.length - 1),
+        });
+      } else if (key.upArrow) {
+        setView({ ...view, cursor: Math.max(view.cursor - 1, 0) });
+      } else if (input === " ") {
+        setView({
+          ...view,
+          entries: view.entries.map((entry, index) =>
+            index === view.cursor
+              ? { ...entry, checked: !entry.checked }
+              : entry,
+          ),
+        });
+      } else if (input === "m") {
+        const outcome = core.buildManagePlan({
+          id: view.skill.id,
+          paths: view.entries
+            .filter((entry) => entry.kind === "existing" && entry.checked)
+            .map((entry) => entry.path),
+          createKeys: view.entries
+            .filter((entry) => entry.kind === "create" && entry.checked)
+            .map((entry) => entry.key),
+          ...(view.canonicalPath !== undefined
+            ? { canonicalPath: view.canonicalPath }
+            : {}),
+        });
+        if (outcome.ok) {
+          setView({ name: "plan", plan: outcome.plan });
+        } else if (outcome.code === "conflict") {
+          setView({
+            name: "pick",
+            skill: view.skill,
+            options: outcome.options,
+            cursor: 0,
+          });
+        } else {
+          setView({ ...view, notice: outcome.message });
+        }
+      } else if (key.escape) {
+        setView({ name: "inventory" });
+      }
+      return;
+    }
+
+    if (view.name === "plan") {
       if (input === "y") {
         setView({ name: "result", outcome: core.applyPlan(view.plan) });
       } else if (input === "n" || key.escape) {
@@ -309,57 +417,286 @@ export function App({ core }: { readonly core: TuiCore }) {
       }
       return;
     }
+
     if (view.name === "result") {
+      setRefresh((n) => n + 1);
       setView({ name: "inventory" });
+      return;
+    }
+
+    // inventory
+    if (search.active) {
+      if (key.escape) {
+        setSearch({ active: false, text: "" });
+      } else if (key.return) {
+        setSearch((s) => ({ ...s, active: false }));
+      } else if (key.backspace || key.delete) {
+        setSearch((s) => ({ ...s, text: s.text.slice(0, -1) }));
+      } else if (input && !key.ctrl && !key.meta) {
+        setSearch((s) => ({ ...s, text: s.text + input }));
+      }
       return;
     }
 
     if (input === "q") {
       exit();
+    } else if (input === "?") {
+      setView({ name: "help" });
+    } else if (input === "/") {
+      setSearch({ active: true, text: "" });
+    } else if (input === "a") {
+      setFilterIndex(0);
+    } else if (/^[1-9]$/.test(input)) {
+      const index = Number(input);
+      if (index <= LOCATION_KEYS.length) setFilterIndex(index);
     } else if (key.downArrow) {
-      setSelected((current) => Math.min(current + 1, inventory.length - 1));
+      setSelected((current) => Math.min(current + 1, Math.max(0, rows.length - 1)));
       setNotice(null);
     } else if (key.upArrow) {
       setSelected((current) => Math.max(current - 1, 0));
       setNotice(null);
-    } else if (input === "l") {
-      const row = inventory[selected];
+    } else if (key.escape && search.text !== "") {
+      setSearch({ active: false, text: "" });
+    } else if (key.return) {
+      const row = rows[selected];
       if (!row) return;
-      const built = core.buildLinkPlan(row.id);
-      if (built.ok) {
-        setView({ name: "plan-review", plan: built.plan });
-        setNotice(null);
+      const check = core.checkContent(row.id);
+      if (check.identical) {
+        openActionPanel(row);
       } else {
-        setNotice(built.message);
+        setView({ name: "pick", skill: row, options: check.options, cursor: 0 });
       }
     }
   });
 
-  if (view.name === "plan-review") return <PlanReview plan={view.plan} />;
-  if (view.name === "result") return <ResultView outcome={view.outcome} />;
+  if (view.name === "help") {
+    return (
+      <Box flexDirection="column">
+        <Header />
+        <Rule />
+        <Text bold> Keys</Text>
+        {HELP_LINES.map(([keys, meaning]) => (
+          <Text key={keys}>
+            {"  "}
+            <Text bold color="cyan">
+              {keys.padEnd(8)}
+            </Text>
+            <Text dimColor>{meaning}</Text>
+          </Text>
+        ))}
+        <Rule />
+        <KeyBar keys={[["any key", "close help"]]} />
+      </Box>
+    );
+  }
 
-  const row = inventory[selected];
+  if (view.name === "pick") {
+    return (
+      <Box flexDirection="column">
+        <Header />
+        <Rule />
+        <Text>
+          {" "}
+          <Text bold>{view.skill.id}</Text>
+          {"  "}
+          <Text color="yellow">
+            ⚠ {view.options.length} copies with DIFFERENT content — pick the
+            canonical one
+          </Text>
+        </Text>
+        <Box flexDirection="column" paddingLeft={1}>
+          {view.options.map((option, index) => {
+            const line = `${LOCATION_LABEL[option.key].padEnd(9)} ${option.path}  sha:${option.hashShort}`;
+            return index === view.cursor ? (
+              <Text key={option.path} inverse bold>{`❯ ${line}`}</Text>
+            ) : (
+              <Text key={option.path}>{`  ${line}`}</Text>
+            );
+          })}
+        </Box>
+        <Text dimColor>
+          {" "}
+          The chosen copy becomes the vault content; the others are backed up
+          and replaced by junctions when you apply the plan.
+        </Text>
+        <Rule />
+        <KeyBar
+          keys={[
+            ["↑↓", "select"],
+            ["Enter", "choose"],
+            ["Esc", "back"],
+          ]}
+        />
+      </Box>
+    );
+  }
+
+  if (view.name === "action") {
+    return (
+      <Box flexDirection="column">
+        <Header />
+        <Rule />
+        <Text>
+          {" "}
+          <Text bold>{view.skill.id}</Text>
+          {"   "}
+          <Text dimColor>
+            {view.skill.locations.length} location
+            {view.skill.locations.length === 1 ? "" : "s"}
+            {view.canonicalPath !== undefined
+              ? ` · canonical: ${view.canonicalPath}`
+              : " · content identical"}
+          </Text>
+        </Text>
+        <Text bold> Manage in which targets?</Text>
+        <Box flexDirection="column" paddingLeft={1}>
+          {view.entries.map((entry, index) => {
+            const box = entry.checked ? "[x]" : "[ ]";
+            const note =
+              entry.kind === "create" ? "  (will be created)" : "";
+            const line = `${box} ${LOCATION_LABEL[entry.key].padEnd(9)} ${entry.path}${note}`;
+            return index === view.cursor ? (
+              <Text key={entry.path} inverse bold>{`❯ ${line}`}</Text>
+            ) : (
+              <Text key={entry.path}>{`  ${line}`}</Text>
+            );
+          })}
+        </Box>
+        {view.notice !== undefined ? (
+          <Text>
+            {" "}
+            <Text color="red">✖ {view.notice}</Text>
+          </Text>
+        ) : null}
+        <Rule />
+        <KeyBar
+          keys={[
+            ["space", "toggle"],
+            ["m", "build plan"],
+            ["Esc", "back"],
+          ]}
+        />
+      </Box>
+    );
+  }
+
+  if (view.name === "plan") {
+    const { plan } = view;
+    return (
+      <Box flexDirection="column">
+        <Header />
+        <Rule />
+        <Text>
+          {" "}
+          <Text bold>Plan review</Text>
+          {"  "}
+          <Text dimColor>{plan.id.slice(0, 21)}…</Text>
+        </Text>
+        <Box
+          borderStyle="round"
+          borderColor="cyan"
+          flexDirection="column"
+          paddingX={1}
+          marginX={1}
+        >
+          {plan.operations.length === 0 ? (
+            <Text dimColor>No operations — already in the desired state.</Text>
+          ) : (
+            plan.operations.map((operation, index) => {
+              const parts = operationParts(operation);
+              return (
+                <Text key={index}>
+                  <Text bold color={parts.color}>
+                    {parts.verb.padEnd(13)}
+                  </Text>
+                  <Text>{parts.detail}</Text>
+                </Text>
+              );
+            })
+          )}
+        </Box>
+        {plan.backupRequired.length > 0 ? (
+          <Text>
+            {" "}
+            <Text color="yellow">
+              ⚠ backs up first: {plan.backupRequired.length} path(s)
+            </Text>
+          </Text>
+        ) : null}
+        <Rule />
+        <KeyBar
+          keys={[
+            ["y", "apply"],
+            ["n", "cancel — no changes"],
+          ]}
+        />
+      </Box>
+    );
+  }
+
+  if (view.name === "result") {
+    return (
+      <Box flexDirection="column">
+        <Header />
+        <Rule />
+        <Box paddingLeft={1} flexDirection="column">
+          <Text bold color={view.outcome.ok ? "green" : "red"}>
+            {view.outcome.ok ? "✔ Success" : "✖ Failed"}
+          </Text>
+          <Text>{view.outcome.message}</Text>
+        </Box>
+        <Rule />
+        <KeyBar keys={[["any key", "back to inventory"]]} />
+      </Box>
+    );
+  }
+
+  const row = rows[selected];
 
   return (
     <Box flexDirection="column">
-      <Header total={inventory.length} />
+      <Header total={inventory.length} filterIndex={filterIndex} />
       <Rule />
       <Legend inventory={inventory} />
       <Rule />
-      <InventoryTable inventory={inventory} selected={selected} />
+      {rows.length === 0 ? (
+        <Box flexDirection="column" paddingLeft={1}>
+          <Text> No skills found{search.text ? ` for "${search.text}"` : ""}.</Text>
+          <Text dimColor>
+            {" "}
+            SkillVault looked in the OpenCode, Claude Code, and agents-store
+            directories. Run `skillvault doctor` for a diagnosis.
+          </Text>
+        </Box>
+      ) : (
+        <InventoryTable rows={rows} selected={selected} />
+      )}
       <Rule />
-      {row ? <DetailPanel row={row} /> : <Text dimColor> no skills found</Text>}
+      {row ? <DetailPanel skill={row} /> : null}
       {notice !== null ? (
         <Text>
           {" "}
           <Text color="red">✖ {notice}</Text>
         </Text>
       ) : null}
+      {search.active || search.text !== "" ? (
+        <Text>
+          {" "}
+          <Text bold color="cyan">
+            /
+          </Text>
+          <Text> {search.text}</Text>
+          {search.active ? <Text inverse> </Text> : null}
+        </Text>
+      ) : null}
       <Rule />
       <KeyBar
         keys={[
-          ["↑↓", "navigate"],
-          ["l", "link"],
+          ["↑↓", "select"],
+          ["Enter", "manage"],
+          ["/", "search"],
+          ["a,1-3", "filter"],
+          ["?", "help"],
           ["q", "quit"],
         ]}
       />

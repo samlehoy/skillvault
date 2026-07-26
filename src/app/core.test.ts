@@ -15,107 +15,173 @@ afterEach(() => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
-const skillsDir = () => path.join(home, ".config", "opencode", "skills");
+const opencodeSkills = () => path.join(home, ".config", "opencode", "skills");
+const agentsSkills = () => path.join(home, ".agents", "skills");
 
-const makeOpenCodeSkill = (id: string, valid = true): string => {
-  const dir = path.join(skillsDir(), id);
+const makeSkill = (base: string, id: string, body = "body\n"): string => {
+  const dir = path.join(base, id);
   fs.mkdirSync(dir, { recursive: true });
-  if (valid) {
-    fs.writeFileSync(
-      path.join(dir, "SKILL.md"),
-      `---\nname: ${id}\ndescription: d\n---\nbody\n`,
-    );
-  }
+  fs.writeFileSync(
+    path.join(dir, "SKILL.md"),
+    `---\nname: ${id}\ndescription: d\n---\n${body}`,
+  );
   return dir;
 };
 
-describe("createTuiCore", () => {
-  it("maps discovered skills to inventory rows with health", () => {
-    makeOpenCodeSkill("plain");
-    const core = createTuiCore({ homeDir: home });
-    const rows = core.loadInventory();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: "plain", health: "unmanaged" });
+describe("loadInventory (aggregated)", () => {
+  it("aggregates the same id across locations into one row", () => {
+    makeSkill(opencodeSkills(), "wrangler");
+    makeSkill(agentsSkills(), "wrangler");
+    makeSkill(opencodeSkills(), "solo");
+
+    const rows = createTuiCore({ homeDir: home }).loadInventory();
+    expect(rows.map((r) => r.id)).toEqual(["solo", "wrangler"]);
+
+    const wrangler = rows.find((r) => r.id === "wrangler");
+    expect(wrangler?.locations).toHaveLength(2);
+    expect(wrangler?.targets["opencode"]).toBe(true);
+    expect(wrangler?.targets["agents-external"]).toBe(true);
+    expect(wrangler?.targets["claude-external"]).toBe(false);
   });
 
-  it("classifies dangling junctions and foreign junctions", () => {
-    const store = path.join(home, "store", "gone");
-    fs.mkdirSync(store, { recursive: true });
-    fs.mkdirSync(skillsDir(), { recursive: true });
-    createJunction(store, path.join(skillsDir(), "gone"));
+  it("aggregate health is the most attention-worthy location health", () => {
+    const store = makeSkill(path.join(home, "store"), "mixed");
+    fs.mkdirSync(opencodeSkills(), { recursive: true });
+    createJunction(store, path.join(opencodeSkills(), "mixed"));
     fs.rmSync(store, { recursive: true, force: true });
+    makeSkill(agentsSkills(), "mixed");
 
-    const foreign = path.join(home, "elsewhere", "skill");
-    fs.mkdirSync(foreign, { recursive: true });
-    createJunction(foreign, path.join(skillsDir(), "foreign"));
-
-    const core = createTuiCore({ homeDir: home });
-    const byId = Object.fromEntries(
-      core.loadInventory().map((r) => [r.id, r.health]),
-    );
-    expect(byId["gone"]).toBe("broken");
-    expect(byId["foreign"]).toBe("external");
+    const rows = createTuiCore({ homeDir: home }).loadInventory();
+    expect(rows[0]?.health).toBe("broken");
   });
 
-  it("manages an unmanaged skill end to end: ingest, backup, link, verify", () => {
-    const sourceDir = makeOpenCodeSkill("web2md");
+  it("sorts most attention-worthy first, then alphabetically", () => {
+    makeSkill(opencodeSkills(), "bbb");
+    const foreign = makeSkill(path.join(home, "elsewhere"), "aaa");
+    fs.mkdirSync(path.join(home, ".claude", "skills"), { recursive: true });
+    createJunction(foreign, path.join(home, ".claude", "skills", "aaa"));
+
+    const rows = createTuiCore({ homeDir: home }).loadInventory();
+    expect(rows.map((r) => `${r.health}:${r.id}`)).toEqual([
+      "unmanaged:bbb",
+      "external:aaa",
+    ]);
+  });
+});
+
+describe("checkContent", () => {
+  it("reports identical copies as identical", () => {
+    makeSkill(opencodeSkills(), "same", "identical\n");
+    makeSkill(agentsSkills(), "same", "identical\n");
+    const check = createTuiCore({ homeDir: home }).checkContent("same");
+    expect(check).toEqual({ identical: true });
+  });
+
+  it("reports differing copies with pickable options", () => {
+    makeSkill(opencodeSkills(), "diff", "version A\n");
+    makeSkill(agentsSkills(), "diff", "version B\n");
+    const check = createTuiCore({ homeDir: home }).checkContent("diff");
+    expect(check.identical).toBe(false);
+    if (!check.identical) {
+      expect(check.options).toHaveLength(2);
+      expect(check.options[0]?.hashShort).toMatch(/^[0-9a-f]{12}$/);
+      expect(check.options[0]?.hashShort).not.toBe(check.options[1]?.hashShort);
+    }
+  });
+});
+
+describe("buildManagePlan", () => {
+  it("manages multiple identical locations in one consolidated plan", () => {
+    const a = makeSkill(opencodeSkills(), "multi", "same\n");
+    const b = makeSkill(agentsSkills(), "multi", "same\n");
     const core = createTuiCore({ homeDir: home });
 
-    const built = core.buildLinkPlan("web2md");
+    const built = core.buildManagePlan({ id: "multi", paths: [a, b] });
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     expect(built.plan.operations.map((o) => o.kind)).toEqual([
+      "backup",
+      "link-create",
       "backup",
       "link-create",
     ]);
 
     const applied = core.applyPlan(built.plan);
     expect(applied.ok).toBe(true);
-
-    const inspection = inspectPath(sourceDir);
-    expect(inspection.kind).toBe("junction");
-    if (inspection.kind === "junction") {
-      expect(
-        inspection.target.startsWith(path.join(home, ".skillvault", "vault")),
-      ).toBe(true);
+    for (const p of [a, b]) {
+      const inspection = inspectPath(p);
+      expect(inspection.kind).toBe("junction");
     }
-    expect(fs.readFileSync(path.join(sourceDir, "SKILL.md"), "utf8")).toContain(
-      "web2md",
+    const row = core.loadInventory().find((r) => r.id === "multi");
+    expect(row?.health).toBe("managed");
+  });
+
+  it("returns a conflict when copies differ and no canonical was chosen", () => {
+    const a = makeSkill(opencodeSkills(), "conf", "A\n");
+    const b = makeSkill(agentsSkills(), "conf", "B\n");
+    const built = createTuiCore({ homeDir: home }).buildManagePlan({
+      id: "conf",
+      paths: [a, b],
+    });
+    expect(built.ok).toBe(false);
+    if (!built.ok) expect(built.code).toBe("conflict");
+  });
+
+  it("uses the chosen canonical copy when copies differ", () => {
+    const a = makeSkill(opencodeSkills(), "conf", "CANONICAL\n");
+    const b = makeSkill(agentsSkills(), "conf", "other\n");
+    const core = createTuiCore({ homeDir: home });
+
+    const built = core.buildManagePlan({
+      id: "conf",
+      paths: [a, b],
+      canonicalPath: a,
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    expect(core.applyPlan(built.plan).ok).toBe(true);
+    expect(fs.readFileSync(path.join(b, "SKILL.md"), "utf8")).toContain(
+      "CANONICAL",
     );
-
-    const backups = fs.readdirSync(path.join(home, ".skillvault", "backups"));
-    expect(backups).toHaveLength(1);
-
-    expect(core.loadInventory()[0]?.health).toBe("managed");
   });
 
-  it("returns a noop plan for an already managed skill", () => {
-    makeOpenCodeSkill("stable");
+  it("creates a link at a target where the skill does not exist yet", () => {
+    makeSkill(agentsSkills(), "only-store", "content\n");
     const core = createTuiCore({ homeDir: home });
-    const first = core.buildLinkPlan("stable");
-    expect(first.ok).toBe(true);
-    if (first.ok) core.applyPlan(first.plan);
+    const creatable = core.creatableTargets("only-store");
+    const opencodeTarget = creatable.find((t) => t.key === "opencode");
+    expect(opencodeTarget).toBeDefined();
 
-    const second = core.buildLinkPlan("stable");
-    expect(second.ok).toBe(true);
-    if (second.ok) {
-      expect(second.noop).toBe(true);
-      expect(second.plan.operations).toEqual([]);
+    const built = core.buildManagePlan({
+      id: "only-store",
+      paths: [path.join(agentsSkills(), "only-store")],
+      createKeys: ["opencode"],
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    expect(core.applyPlan(built.plan).ok).toBe(true);
+    const created = inspectPath(path.join(opencodeSkills(), "only-store"));
+    expect(created.kind).toBe("junction");
+  });
+
+  it("never offers the agents store as a creatable target (ADR-0005)", () => {
+    makeSkill(opencodeSkills(), "oc-only");
+    const creatable = createTuiCore({ homeDir: home }).creatableTargets(
+      "oc-only",
+    );
+    expect(creatable.map((t) => t.key)).not.toContain("agents-external");
+  });
+
+  it("reports unknown ids cleanly", () => {
+    const built = createTuiCore({ homeDir: home }).buildManagePlan({
+      id: "ghost",
+      paths: [],
+    });
+    expect(built.ok).toBe(false);
+    if (!built.ok && built.code === "error") {
+      expect(built.message).toContain("ghost");
     }
-  });
-
-  it("reports invalid skills as structured messages, not throws", () => {
-    makeOpenCodeSkill("broken", false);
-    const core = createTuiCore({ homeDir: home });
-    const built = core.buildLinkPlan("broken");
-    expect(built.ok).toBe(false);
-    if (!built.ok) expect(built.message).toContain("SKILL.md");
-  });
-
-  it("reports unknown skill ids cleanly", () => {
-    const core = createTuiCore({ homeDir: home });
-    const built = core.buildLinkPlan("ghost");
-    expect(built.ok).toBe(false);
-    if (!built.ok) expect(built.message).toContain("ghost");
   });
 });
