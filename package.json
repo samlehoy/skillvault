@@ -1,0 +1,35 @@
+{
+  "name": "skillkeep",
+  "version": "0.0.1",
+  "description": "Local-first TUI for managing AI agent skills across agent IDEs. Pre-development placeholder.",
+  "keywords": [
+    "ai",
+    "agent",
+    "skills",
+    "skill-management",
+    "tui",
+    "opencode",
+    "antigravity",
+    "claude-code",
+    "codex"
+  ],
+  "license": "MIT",
+  "author": "samlehoy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samlehoy/skillkeep.git"
+  },
+  "homepage": "https://github.com/samlehoy/skillkeep#readme",
+  "type": "module",
+  "bin": {
+    "skillkeep": "bin/skillkeep.mjs"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
