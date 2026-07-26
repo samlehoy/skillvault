@@ -6,7 +6,13 @@ This is a living, milestone-level delivery plan. It deliberately avoids file-lev
 
 The implementation stack is decided (see `ARCHITECTURE.md` and ADR-0002): TypeScript on Node LTS, Ink TUI, Vitest, Zod, Git via the system `git` executable, distributed as an npm package.
 
-Progress: Milestone 0 and Milestone 1 are complete (M1 finished 2026-07-26: schemas, skill IDs and collisions, `SKILL.md` validation, override/disable resolution, source descriptors, ownership/actual/plan/operation models, cross-project fixtures, and determinism tests — 92 passing core tests). Milestone 2 (OpenCode local vertical slice and the first public 0.x npm release) is next.
+Progress: Milestone 0 and Milestone 1 are complete (M1 finished 2026-07-26: schemas, skill IDs and collisions, `SKILL.md` validation, override/disable resolution, source descriptors, ownership/actual/plan/operation models, cross-project fixtures, and determinism tests — 92 passing core tests). Milestone 2 is in progress (as of 2026-07-26): junction primitives, content hashing, verified backups, OpenCode read-only discovery (field-tested against a real installation), vault ingestion with immutable hash-keyed revisions, link/unlink planners, and the transaction executor with lock, staleness gate, and automatic rollback are done. Remaining in M2: headless `doctor`, the Ink TUI, the manual Windows acceptance run, and the first public 0.x release.
+
+Recorded debts to clear inside M2/M7 (must not silently slip):
+
+- A build/emit step (tsconfig is currently `noEmit`) and real package entry points are required before the first 0.x release; the published package still contains only the placeholder bin.
+- Transaction records are returned in memory but not yet persisted under `~/.skillvault/`; user-requested rollback and crash recovery depend on persistence.
+- The "mutations constrained to approved roots" security boundary is implicit in the planners; an explicit scoped-mutation guard must exist before uninstall work starts (M7).
 
 ## Goal
 
