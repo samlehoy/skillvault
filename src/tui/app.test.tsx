@@ -38,6 +38,7 @@ const wrangler: AggregatedSkillView = {
     "claude-external": false,
     "agents-external": true,
   },
+  bundle: "cloudflare/skills",
 };
 
 const askMatt: AggregatedSkillView = {
@@ -162,6 +163,44 @@ describe("inventory", () => {
     stdin.write("x");
     await tick();
     expect(lastFrame()).toContain("2 skills");
+    unmount();
+  });
+});
+
+describe("bundle grouping", () => {
+  it("g toggles between status sections and bundle sections", async () => {
+    const { lastFrame, stdin, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    stdin.write("g");
+    await tick();
+    let frame = lastFrame() ?? "";
+    expect(frame).toContain("cloudflare/skills (1)");
+    expect(frame).toContain("(unknown source) (1)");
+    expect(frame).not.toContain("UNMANAGED (1)");
+
+    stdin.write("g");
+    await tick();
+    frame = lastFrame() ?? "";
+    expect(frame).toContain("UNMANAGED (1)");
+    expect(frame).not.toContain("(unknown source)");
+    unmount();
+  });
+
+  it("shows bundle membership in the detail panel", async () => {
+    const { lastFrame, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    expect(lastFrame()).toContain("part of cloudflare/skills");
+    unmount();
+  });
+
+  it("shows bundle context in the action panel", async () => {
+    const { lastFrame, stdin, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    stdin.write("\r");
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("part of cloudflare/skills");
+    expect(frame).toContain("1 skill from this bundle");
     unmount();
   });
 });

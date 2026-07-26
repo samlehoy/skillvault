@@ -183,29 +183,67 @@ function summaryFor(skill: AggregatedSkillView): string {
   return `${targetCount} IDE${copies > 1 ? ` · ${copies} copies` : ""}`;
 }
 
+export type Grouping = "status" | "bundle";
+
+const UNKNOWN_BUNDLE = "(unknown source)";
+
 type DisplayLine =
-  | { readonly type: "header"; readonly health: Health; readonly count: number }
+  | {
+      readonly type: "header";
+      readonly key: string;
+      readonly symbol: string;
+      readonly color: string;
+      readonly title: string;
+      readonly hint: string;
+      readonly count: number;
+    }
   | { readonly type: "gap" }
   | { readonly type: "row"; readonly row: AggregatedSkillView; readonly rowIndex: number };
+
+const bundleKeyOf = (row: AggregatedSkillView): string =>
+  row.bundle ?? UNKNOWN_BUNDLE;
 
 function InventoryTable({
   rows,
   selected,
+  grouping,
 }: {
   readonly rows: readonly AggregatedSkillView[];
   readonly selected: number;
+  readonly grouping: Grouping;
 }) {
   const lines: DisplayLine[] = [];
-  let previousHealth: Health | null = null;
+  let previousKey: string | null = null;
   rows.forEach((row, rowIndex) => {
-    if (row.health !== previousHealth) {
-      if (previousHealth !== null) lines.push({ type: "gap" });
-      lines.push({
-        type: "header",
-        health: row.health,
-        count: rows.filter((r) => r.health === row.health).length,
-      });
-      previousHealth = row.health;
+    const sectionKey = grouping === "status" ? row.health : bundleKeyOf(row);
+    if (sectionKey !== previousKey) {
+      if (previousKey !== null) lines.push({ type: "gap" });
+      if (grouping === "status") {
+        const style = HEALTH_STYLE[row.health];
+        lines.push({
+          type: "header",
+          key: sectionKey,
+          symbol: style.symbol,
+          color: style.color,
+          title: row.health.toUpperCase(),
+          hint: SECTION_HINT[row.health],
+          count: rows.filter((r) => r.health === row.health).length,
+        });
+      } else {
+        lines.push({
+          type: "header",
+          key: sectionKey,
+          symbol: "▣",
+          color: row.bundle !== undefined ? "magenta" : "white",
+          title: sectionKey,
+          hint:
+            row.bundle !== undefined
+              ? "installed from this source repository"
+              : "no installer lockfile mentions these skills",
+          count: rows.filter((r) => bundleKeyOf(r) === sectionKey).length,
+        });
+      }
+      previousKey = sectionKey;
     }
     lines.push({ type: "row", row, rowIndex });
   });
@@ -225,14 +263,13 @@ function InventoryTable({
       {lines.slice(start, end).map((line, offset) => {
         if (line.type === "gap") return <Text key={`gap-${offset}`}> </Text>;
         if (line.type === "header") {
-          const style = HEALTH_STYLE[line.health];
           return (
-            <Text key={`header-${line.health}`}>
+            <Text key={`header-${line.key}`}>
               {" "}
-              <Text bold color={style.color}>
-                {style.symbol} {line.health.toUpperCase()} ({line.count})
+              <Text bold color={line.color}>
+                {line.symbol} {line.title} ({line.count})
               </Text>
-              <Text dimColor> — {SECTION_HINT[line.health]}</Text>
+              <Text dimColor> — {line.hint}</Text>
             </Text>
           );
         }
@@ -259,7 +296,13 @@ function InventoryTable({
   );
 }
 
-function DetailPanel({ skill }: { readonly skill: AggregatedSkillView }) {
+function DetailPanel({
+  skill,
+  bundleCount,
+}: {
+  readonly skill: AggregatedSkillView;
+  readonly bundleCount: number;
+}) {
   return (
     <Box flexDirection="column" paddingLeft={1}>
       <Text>
@@ -273,6 +316,16 @@ function DetailPanel({ skill }: { readonly skill: AggregatedSkillView }) {
         {" — "}
         {skill.locations.length} location{skill.locations.length === 1 ? "" : "s"}:
       </Text>
+      {skill.bundle !== undefined ? (
+        <Text>
+          {"  "}
+          <Text color="magenta">▣ part of {skill.bundle}</Text>
+          <Text dimColor>
+            {" — "}
+            {bundleCount} skill{bundleCount === 1 ? "" : "s"} in this bundle
+          </Text>
+        </Text>
+      ) : null}
       {skill.locations.map((location) => (
         <Text key={location.path}>
           {"  "}
@@ -321,6 +374,7 @@ const HELP_LINES: readonly (readonly [string, string])[] = [
   ["Enter", "open the action panel for the selected skill"],
   ["/", "incremental search (Esc clears)"],
   ["a, 1-5", "filter by target"],
+  ["g", "group by status / by bundle (source repository)"],
   ["space", "toggle a target checkbox (action panel)"],
   ["m", "build the consolidated plan (action panel)"],
   ["y / n", "apply / cancel in plan review — cancel changes nothing"],
@@ -335,18 +389,29 @@ export function App({ core }: { readonly core: TuiCore }) {
   const [selectedRaw, setSelected] = useState(0);
   const [view, setView] = useState<View>({ name: "inventory" });
   const [filterIndex, setFilterIndex] = useState(0);
+  const [grouping, setGrouping] = useState<Grouping>("status");
   const [search, setSearch] = useState({ active: false, text: "" });
   const [notice, setNotice] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const filterKey =
       filterIndex > 0 ? LOCATION_KEYS[filterIndex - 1] : undefined;
-    return inventory.filter(
+    const filtered = inventory.filter(
       (row) =>
         (filterKey === undefined || row.targets[filterKey]) &&
         (search.text === "" || row.id.includes(search.text)),
     );
-  }, [inventory, filterIndex, search.text]);
+    if (grouping === "status") return filtered;
+    // Bundle grouping: labelled bundles alphabetically, unlabelled skills
+    // last; the stable sort keeps the severity-then-id order within each
+    // bundle section.
+    return [...filtered].sort((a, b) => {
+      if (a.bundle === undefined && b.bundle === undefined) return 0;
+      if (a.bundle === undefined) return 1;
+      if (b.bundle === undefined) return -1;
+      return a.bundle.localeCompare(b.bundle);
+    });
+  }, [inventory, filterIndex, search.text, grouping]);
   const selected = Math.min(selectedRaw, Math.max(0, rows.length - 1));
 
   const openActionPanel = (
@@ -484,6 +549,8 @@ export function App({ core }: { readonly core: TuiCore }) {
       setSearch({ active: true, text: "" });
     } else if (input === "a") {
       setFilterIndex(0);
+    } else if (input === "g") {
+      setGrouping((current) => (current === "status" ? "bundle" : "status"));
     } else if (key.rightArrow) {
       setFilterIndex((current) => (current + 1) % (LOCATION_KEYS.length + 1));
     } else if (key.leftArrow) {
@@ -577,6 +644,10 @@ export function App({ core }: { readonly core: TuiCore }) {
   }
 
   if (view.name === "action") {
+    const bundleSize =
+      view.skill.bundle !== undefined
+        ? inventory.filter((r) => r.bundle === view.skill.bundle).length
+        : 0;
     return (
       <Box flexDirection="column">
         <Header />
@@ -593,6 +664,17 @@ export function App({ core }: { readonly core: TuiCore }) {
               : " · content identical"}
           </Text>
         </Text>
+        {view.skill.bundle !== undefined ? (
+          <Text>
+            {" "}
+            <Text color="magenta">▣ part of {view.skill.bundle}</Text>
+            <Text dimColor>
+              {" — "}
+              {bundleSize} skill{bundleSize === 1 ? "" : "s"} from this bundle
+              {" · whole-bundle apply arrives with batch support"}
+            </Text>
+          </Text>
+        ) : null}
         <Text bold> Manage in which targets?</Text>
         <Box flexDirection="column" paddingLeft={1}>
           {view.entries.map((entry, index) => {
@@ -714,10 +796,19 @@ export function App({ core }: { readonly core: TuiCore }) {
           </Text>
         </Box>
       ) : (
-        <InventoryTable rows={rows} selected={selected} />
+        <InventoryTable rows={rows} selected={selected} grouping={grouping} />
       )}
       <Rule />
-      {row ? <DetailPanel skill={row} /> : null}
+      {row ? (
+        <DetailPanel
+          skill={row}
+          bundleCount={
+            row.bundle !== undefined
+              ? inventory.filter((r) => r.bundle === row.bundle).length
+              : 0
+          }
+        />
+      ) : null}
       {notice !== null ? (
         <Text>
           {" "}
@@ -741,6 +832,7 @@ export function App({ core }: { readonly core: TuiCore }) {
           ["Enter", "manage"],
           ["/", "search"],
           ["←→", "target"],
+          ["g", "group"],
           ["?", "help"],
           ["q", "quit"],
         ]}

@@ -175,6 +175,7 @@ Dim full-screen overlay listing every key, grouped by screen. Any key closes it.
 | `Enter`     | Inventory   | Open action panel for the selected skill        |
 | `/`         | Inventory   | Incremental search; Esc clears                  |
 | `a`, `1`–`n`| Inventory   | Target filter tabs                              |
+| `g`         | Inventory   | Toggle grouping: by status ↔ by bundle          |
 | `?`         | Inventory   | Help overlay                                    |
 | `q`         | Inventory   | Quit (main screen only)                         |
 | `space`     | Action panel| Toggle target checkbox                          |
@@ -192,14 +193,14 @@ Dim full-screen overlay listing every key, grouped by screen. Any key closes it.
 - **Plan goes stale between review and apply** (files changed underneath): the executor rejects it; Result shows "re-plan needed" and returns to a refreshed Inventory.
 - **Terminal too short for legend + 12 rows:** viewport shrinks before the legend collapses to one summary line.
 
-## Planned extension: bundle grouping (decided 2026-07-26)
+## Bundle grouping (decided 2026-07-26, implemented 2026-07-27)
 
-A **bundle** is a source repository that ships multiple skills (e.g. `obra/superpowers`, `cloudflare/skills`). It is not a plugin (plugins are executable IDE extensions, ADR-0007). Decisions:
+A **bundle** is a source repository that ships multiple skills (e.g. `obra/superpowers`, `cloudflare/skills`). It is not a plugin (plugins are executable IDE extensions, ADR-0007). Decisions, now implemented:
 
 - The unit of management and removal stays the **individual skill**; removing one skill never implicitly removes its bundle (no dependency resolver — PRODUCT.md non-goal).
-- `g` toggles the section grouping: by status (default) ↔ by bundle (`▣ obra/superpowers (14)`, `▣ (unknown source)`); the provider dimension is already covered by the target tab bar, so no drill-down screens are added.
-- The detail panel and action panel show bundle membership (`part of obra/superpowers — 14 skills`), and the action panel offers an explicit "apply to all N skills from this bundle" batch option (batch apply mechanics arrive with M7), with a warning that same-bundle skills may reference each other.
-- Bundle labels come from installer lockfiles (`~/.agents/.skill-lock.json`, Antigravity `skills-lock.json`) as **Declared** provenance evidence; that provenance-reading slice is pulled forward from M6 into M5. No evidence → `(unknown source)`, never a name-based guess.
+- `g` toggles the section grouping: by status (default) ↔ by bundle (`▣ obra/superpowers (14)`, `▣ (unknown source)` last); the provider dimension is already covered by the target tab bar, so no drill-down screens are added. Within a bundle section rows keep the severity-then-alphabetical order.
+- The detail panel and action panel show bundle membership (`▣ part of obra/superpowers — 14 skills`). The action panel's explicit "apply to all N skills from this bundle" batch option ships with the batch mechanics in M7; until then the panel states that honestly, with the standing warning that same-bundle skills may reference each other.
+- Bundle labels come from installer lockfiles (`~/.agents/.skill-lock.json` v3, Antigravity `skills-lock.json` v1) as **Declared** provenance evidence, re-read on every inventory load; that provenance-reading slice was pulled forward from M6 into M5. No evidence → `(unknown source)`, never a name-based guess.
 
 ## Planned extension: MCP and Plugins tabs (read-only)
 
