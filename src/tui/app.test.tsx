@@ -99,17 +99,21 @@ describe("inventory", () => {
     await tick();
     const frame = lastFrame() ?? "";
     expect(frame).toContain("2 skills");
-    expect(frame).toMatch(/wrangler.+oc✓ av– ai– cl– ag✓.+2 copies/);
-    expect(frame).toMatch(/ask-matt.+oc– av– ai– cl✓ ag–/);
+    expect(frame).toMatch(/wrangler.+2 IDE · 2 copies/);
+    expect(frame).toMatch(/ask-matt.+1 IDE/);
     unmount();
   });
 
-  it("shows the legend and the selected skill's locations", async () => {
+  it("groups rows under status section headers and shows a tab bar with counts", async () => {
     const { lastFrame, unmount } = render(<App core={makeCore()} />);
     await tick();
     const frame = lastFrame() ?? "";
-    expect(frame).toContain("link owned by another tool");
-    expect(frame).toContain("found in 2 locations");
+    expect(frame).toContain("UNMANAGED (1)");
+    expect(frame).toContain("EXTERNAL (1)");
+    expect(frame).toContain("links owned by another tool");
+    expect(frame).toContain("All (2)");
+    expect(frame).toContain("agents (1)");
+    expect(frame).toContain("in: opencode, agents");
     expect(frame).toContain("(store)");
     expect(frame).toContain("(copy)");
     unmount();
@@ -375,13 +379,14 @@ describe("viewport", () => {
     let frame = lastFrame() ?? "";
     expect(frame).toContain("skill-00");
     expect(frame).not.toContain("skill-29");
-    expect(frame).toContain("↓ 18 more");
+    expect(frame).toContain("↓ 19 more");
 
     for (let i = 0; i < 29; i++) stdin.write("\u001B[B");
     await tick();
     frame = lastFrame() ?? "";
     expect(frame).toContain("skill-29");
-    expect(frame).toContain("↑ 18 more");
+    expect(frame).toContain("↑ 19 more");
+    expect(frame).not.toContain("skill-00");
     unmount();
   });
 });

@@ -12,6 +12,7 @@ Living design document for the TUI's screens, navigation, and keybindings. Decid
 4. Aggregate row status = the most attention-worthy of its locations: `broken` > `unmanaged` > `external` > `managed`.
 5. Esc always goes back one level; `q` quits only from the main screen.
 6. Same-ID-different-content copies **block** management until the user picks a canonical source (required by PRODUCT.md).
+7. **(2026-07-26 revision, owner feedback)** Categorization must sit inside the eye's scanning path, not beside it: the passive four-line legend and corner filter chips went unnoticed. The list is now **grouped under colored status section headers** (`○ UNMANAGED (84) — not yet managed…`) with the meaning inline; the target filter is a **full-width tab bar with counts** directly above the table, switchable with `←`/`→` as well as `a`/`1`–`5`; rows show `N IDE · M copies` instead of the cryptic `oc✓ av–` matrix codes (per-location detail stays in the detail panel); status meanings also appear in the `?` help overlay.
 
 ## Screen Map
 

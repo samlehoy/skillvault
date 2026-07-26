@@ -59,13 +59,6 @@ const LOCATION_LABEL: Record<LocationKey, string> = {
   "claude-external": "claude",
   "agents-external": "agents",
 };
-const LOCATION_CODE: Record<LocationKey, string> = {
-  opencode: "oc",
-  antigravity: "av",
-  "antigravity-ide": "ai",
-  "claude-external": "cl",
-  "agents-external": "ag",
-};
 
 const VISIBLE_ROWS = 12;
 
@@ -127,13 +120,7 @@ function operationParts(
   }
 }
 
-function Header({
-  total,
-  filterIndex,
-}: {
-  readonly total?: number;
-  readonly filterIndex?: number;
-}) {
+function Header({ total }: { readonly total?: number }) {
   return (
     <Box justifyContent="space-between">
       <Text>
@@ -142,57 +129,64 @@ function Header({
         </Text>
         {total !== undefined ? <Text dimColor>· {total} skills</Text> : null}
       </Text>
-      {filterIndex !== undefined ? (
-        <Text>
-          <Text inverse={filterIndex === 0}>[a All]</Text>
-          {LOCATION_KEYS.map((key, index) => (
-            <Text key={key} inverse={filterIndex === index + 1}>
-              {` [${index + 1} ${LOCATION_LABEL[key]}]`}
-            </Text>
-          ))}
-        </Text>
+      {total !== undefined ? (
+        <Text dimColor>? help · q quit </Text>
       ) : null}
     </Box>
   );
 }
 
-function Legend({ inventory }: { readonly inventory: readonly AggregatedSkillView[] }) {
-  const counts = useMemo(() => {
-    const byHealth: Partial<Record<Health, number>> = {};
-    for (const row of inventory) {
-      byHealth[row.health] = (byHealth[row.health] ?? 0) + 1;
-    }
-    return byHealth;
-  }, [inventory]);
-
+function TabBar({
+  inventory,
+  filterIndex,
+}: {
+  readonly inventory: readonly AggregatedSkillView[];
+  readonly filterIndex: number;
+}) {
+  const countFor = (key: LocationKey): number =>
+    inventory.filter((row) => row.targets[key]).length;
+  const tabs = [
+    { label: "All", count: inventory.length },
+    ...LOCATION_KEYS.map((key) => ({
+      label: LOCATION_LABEL[key],
+      count: countFor(key),
+    })),
+  ];
   return (
-    <Box flexDirection="column" paddingLeft={1}>
-      {(Object.keys(HEALTH_STYLE) as Health[]).map((health) => {
-        const style = HEALTH_STYLE[health];
-        const count = counts[health] ?? 0;
-        return (
-          <Text key={health} dimColor={count === 0}>
-            <Text {...(count > 0 ? { color: style.color } : {})}>
-              {style.symbol} {String(count).padStart(3)}
-            </Text>
-            <Text bold={count > 0}>{` ${health.padEnd(10)}`}</Text>
-            <Text dimColor>{style.meaning}</Text>
+    <Text>
+      {tabs.map((tab, index) => (
+        <Text key={tab.label}>
+          {"  "}
+          <Text inverse={index === filterIndex} bold={index === filterIndex}>
+            {` ${tab.label} (${tab.count}) `}
           </Text>
-        );
-      })}
-    </Box>
+        </Text>
+      ))}
+    </Text>
   );
 }
+
+const SECTION_HINT: Record<Health, string> = {
+  managed: "linked into the SkillVault vault",
+  external: "links owned by another tool",
+  broken: "link target is missing",
+  unmanaged: "not yet managed — press Enter to manage",
+};
 
 function Rule() {
   return <Text dimColor>{"─".repeat(78)}</Text>;
 }
 
-function matrixFor(skill: AggregatedSkillView): string {
-  return LOCATION_KEYS.map(
-    (key) => `${LOCATION_CODE[key]}${skill.targets[key] ? "✓" : "–"}`,
-  ).join(" ");
+function summaryFor(skill: AggregatedSkillView): string {
+  const targetCount = LOCATION_KEYS.filter((key) => skill.targets[key]).length;
+  const copies = skill.locations.length;
+  return `${targetCount} IDE${copies > 1 ? ` · ${copies} copies` : ""}`;
 }
+
+type DisplayLine =
+  | { readonly type: "header"; readonly health: Health; readonly count: number }
+  | { readonly type: "gap" }
+  | { readonly type: "row"; readonly row: AggregatedSkillView; readonly rowIndex: number };
 
 function InventoryTable({
   rows,
@@ -201,24 +195,51 @@ function InventoryTable({
   readonly rows: readonly AggregatedSkillView[];
   readonly selected: number;
 }) {
+  const lines: DisplayLine[] = [];
+  let previousHealth: Health | null = null;
+  rows.forEach((row, rowIndex) => {
+    if (row.health !== previousHealth) {
+      if (previousHealth !== null) lines.push({ type: "gap" });
+      lines.push({
+        type: "header",
+        health: row.health,
+        count: rows.filter((r) => r.health === row.health).length,
+      });
+      previousHealth = row.health;
+    }
+    lines.push({ type: "row", row, rowIndex });
+  });
+
+  const selectedLine = lines.findIndex(
+    (line) => line.type === "row" && line.rowIndex === selected,
+  );
   const start = Math.max(
     0,
-    Math.min(selected - Math.floor(VISIBLE_ROWS / 2), rows.length - VISIBLE_ROWS),
+    Math.min(selectedLine - Math.floor(VISIBLE_ROWS / 2), lines.length - VISIBLE_ROWS),
   );
-  const end = Math.min(rows.length, start + VISIBLE_ROWS);
-  const window = rows.slice(start, end);
+  const end = Math.min(lines.length, start + VISIBLE_ROWS);
 
   return (
     <Box flexDirection="column">
       {start > 0 ? <Text dimColor>{`   ↑ ${start} more`}</Text> : null}
-      {window.map((row, offset) => {
-        const index = start + offset;
-        const isSelected = index === selected;
+      {lines.slice(start, end).map((line, offset) => {
+        if (line.type === "gap") return <Text key={`gap-${offset}`}> </Text>;
+        if (line.type === "header") {
+          const style = HEALTH_STYLE[line.health];
+          return (
+            <Text key={`header-${line.health}`}>
+              {" "}
+              <Text bold color={style.color}>
+                {style.symbol} {line.health.toUpperCase()} ({line.count})
+              </Text>
+              <Text dimColor> — {SECTION_HINT[line.health]}</Text>
+            </Text>
+          );
+        }
+        const { row, rowIndex } = line;
         const style = HEALTH_STYLE[row.health];
-        const copies =
-          row.locations.length > 1 ? `${row.locations.length} copies` : "";
-        const cells = `${style.symbol} ${row.id.padEnd(28)} ${matrixFor(row)}   ${copies}`;
-        return isSelected ? (
+        const cells = `${style.symbol} ${row.id.padEnd(28)} ${summaryFor(row)}`;
+        return rowIndex === selected ? (
           <Text key={row.id} inverse bold>
             {`❯ ${cells}`}
           </Text>
@@ -227,12 +248,12 @@ function InventoryTable({
             {"  "}
             <Text color={style.color}>{`${style.symbol} `}</Text>
             <Text>{`${row.id.padEnd(28)} `}</Text>
-            <Text dimColor>{`${matrixFor(row)}   ${copies}`}</Text>
+            <Text dimColor>{summaryFor(row)}</Text>
           </Text>
         );
       })}
-      {end < rows.length ? (
-        <Text dimColor>{`   ↓ ${rows.length - end} more`}</Text>
+      {end < lines.length ? (
+        <Text dimColor>{`   ↓ ${lines.length - end} more`}</Text>
       ) : null}
     </Box>
   );
@@ -243,14 +264,20 @@ function DetailPanel({ skill }: { readonly skill: AggregatedSkillView }) {
     <Box flexDirection="column" paddingLeft={1}>
       <Text>
         <Text bold>{skill.id}</Text>
-        {" — found in "}
+        {" · in: "}
+        <Text color="cyan">
+          {LOCATION_KEYS.filter((key) => skill.targets[key])
+            .map((key) => LOCATION_LABEL[key])
+            .join(", ")}
+        </Text>
+        {" — "}
         {skill.locations.length} location{skill.locations.length === 1 ? "" : "s"}:
       </Text>
       {skill.locations.map((location) => (
         <Text key={location.path}>
           {"  "}
           <Text color={HEALTH_STYLE[location.health].color}>
-            {LOCATION_LABEL[location.key].padEnd(9)}
+            {`${LOCATION_LABEL[location.key].padEnd(13)} `}
           </Text>
           <Text>{location.path}</Text>
           <Text dimColor>
@@ -285,7 +312,12 @@ function KeyBar({ keys }: { readonly keys: readonly (readonly [string, string])[
 }
 
 const HELP_LINES: readonly (readonly [string, string])[] = [
+  ["●", "managed — linked into the SkillVault vault"],
+  ["◆", "external — link owned by another tool (e.g. npx skills)"],
+  ["✖", "broken — link whose target no longer exists"],
+  ["○", "unmanaged — plain folder, not yet managed"],
   ["↑ ↓", "move selection"],
+  ["← →", "switch target tab"],
   ["Enter", "open the action panel for the selected skill"],
   ["/", "incremental search (Esc clears)"],
   ["a, 1-5", "filter by target"],
@@ -452,6 +484,13 @@ export function App({ core }: { readonly core: TuiCore }) {
       setSearch({ active: true, text: "" });
     } else if (input === "a") {
       setFilterIndex(0);
+    } else if (key.rightArrow) {
+      setFilterIndex((current) => (current + 1) % (LOCATION_KEYS.length + 1));
+    } else if (key.leftArrow) {
+      setFilterIndex(
+        (current) =>
+          (current + LOCATION_KEYS.length) % (LOCATION_KEYS.length + 1),
+      );
     } else if (/^[1-9]$/.test(input)) {
       const index = Number(input);
       if (index <= LOCATION_KEYS.length) setFilterIndex(index);
@@ -661,9 +700,9 @@ export function App({ core }: { readonly core: TuiCore }) {
 
   return (
     <Box flexDirection="column">
-      <Header total={inventory.length} filterIndex={filterIndex} />
+      <Header total={inventory.length} />
       <Rule />
-      <Legend inventory={inventory} />
+      <TabBar inventory={inventory} filterIndex={filterIndex} />
       <Rule />
       {rows.length === 0 ? (
         <Box flexDirection="column" paddingLeft={1}>
@@ -701,7 +740,7 @@ export function App({ core }: { readonly core: TuiCore }) {
           ["↑↓", "select"],
           ["Enter", "manage"],
           ["/", "search"],
-          ["a,1-5", "filter"],
+          ["←→", "target"],
           ["?", "help"],
           ["q", "quit"],
         ]}
