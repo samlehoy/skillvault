@@ -19,6 +19,14 @@ import type { Plan } from "../core/plan.js";
 
 export type { AggregatedSkillView, ApplyOutcome, Health, TuiCore } from "../app/core.js";
 
+type Domain = "skills" | "mcp" | "plugins";
+const DOMAINS: readonly Domain[] = ["skills", "mcp", "plugins"];
+const DOMAIN_LABEL: Record<Domain, string> = {
+  skills: "Skills",
+  mcp: "MCP",
+  plugins: "Plugins",
+};
+
 const HEALTH_STYLE: Record<
   Health,
   { color: string; symbol: string; meaning: string }
@@ -122,7 +130,13 @@ function operationParts(
   }
 }
 
-function Header({ total }: { readonly total?: number }) {
+function Header({
+  total,
+  domain,
+}: {
+  readonly total?: number;
+  readonly domain?: Domain;
+}) {
   return (
     <Box justifyContent="space-between">
       <Text>
@@ -130,8 +144,21 @@ function Header({ total }: { readonly total?: number }) {
           {" ⬢ SkillVault "}
         </Text>
         {total !== undefined ? <Text dimColor>· {total} skills</Text> : null}
+        {domain !== undefined ? (
+          <Text>
+            {"   "}
+            {DOMAINS.map((d) => (
+              <Text key={d}>
+                <Text inverse={d === domain} bold={d === domain}>
+                  {` ${DOMAIN_LABEL[d]} `}
+                </Text>{" "}
+              </Text>
+            ))}
+            <Text dimColor>(Tab)</Text>
+          </Text>
+        ) : null}
       </Text>
-      {total !== undefined ? (
+      {total !== undefined || domain !== undefined ? (
         <Text dimColor>? help · q quit </Text>
       ) : null}
     </Box>
@@ -373,6 +400,7 @@ const HELP_LINES: readonly (readonly [string, string])[] = [
   ["○", "unmanaged — plain folder, not yet managed"],
   ["↑ ↓", "move selection"],
   ["← →", "switch target tab"],
+  ["Tab", "switch domain: Skills / MCP / Plugins (read-only)"],
   ["Enter", "open the action panel for the selected skill"],
   ["/", "incremental search (Esc clears)"],
   ["a, 1-5", "filter by target"],
@@ -400,6 +428,9 @@ export function App({ core }: { readonly core: TuiCore }) {
   const [view, setView] = useState<View>({ name: "inventory" });
   const [filterIndex, setFilterIndex] = useState(0);
   const [grouping, setGrouping] = useState<Grouping>("status");
+  const [domain, setDomain] = useState<Domain>("skills");
+  const mcp = useMemo(() => core.mcpInventory(), [core, refresh]);
+  const plugins = useMemo(() => core.pluginInventory(), [core, refresh]);
   const [search, setSearch] = useState({ active: false, text: "" });
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -569,6 +600,21 @@ export function App({ core }: { readonly core: TuiCore }) {
       } else if (input && !key.ctrl && !key.meta) {
         setSearch((s) => ({ ...s, text: s.text + input }));
       }
+      return;
+    }
+
+    if (key.tab) {
+      setDomain(
+        (current) =>
+          DOMAINS[(DOMAINS.indexOf(current) + 1) % DOMAINS.length] ?? "skills",
+      );
+      return;
+    }
+    if (domain !== "skills") {
+      // MCP and Plugins tabs are read-only inventories: no selection, no
+      // actions (ADR-0007).
+      if (input === "q") exit();
+      else if (input === "?") setView({ name: "help" });
       return;
     }
 
@@ -826,11 +872,98 @@ export function App({ core }: { readonly core: TuiCore }) {
     );
   }
 
+  if (domain === "mcp") {
+    return (
+      <Box flexDirection="column">
+        <Header domain="mcp" />
+        <Rule />
+        {mcp.servers.length === 0 ? (
+          <Text> No MCP servers found in the supported IDE configs.</Text>
+        ) : (
+          <Box flexDirection="column" paddingLeft={1}>
+            {mcp.servers.map((server) => (
+              <Text key={`${server.ide}:${server.name}`}>
+                <Text bold>{server.name.padEnd(20)}</Text>
+                <Text color="cyan">{server.ide.padEnd(16)}</Text>
+                <Text dimColor>{server.transport.padEnd(8)}</Text>
+                <Text>{server.target}</Text>
+                {server.enabled === false ? (
+                  <Text color="yellow"> (disabled)</Text>
+                ) : null}
+                {server.secretKeys.length > 0 ? (
+                  <Text dimColor> · secrets: {server.secretKeys.join(", ")}</Text>
+                ) : null}
+              </Text>
+            ))}
+          </Box>
+        )}
+        {mcp.findings.map((finding) => (
+          <Text key={finding}>
+            {" "}
+            <Text color="yellow">⚠ {finding}</Text>
+          </Text>
+        ))}
+        {mcp.warnings.map((warning) => (
+          <Text key={warning} dimColor>
+            {"  "}
+            {warning}
+          </Text>
+        ))}
+        <Text dimColor> Read-only inventory — secret values are never shown.</Text>
+        <Rule />
+        <KeyBar
+          keys={[
+            ["Tab", "domain"],
+            ["?", "help"],
+            ["q", "quit"],
+          ]}
+        />
+      </Box>
+    );
+  }
+
+  if (domain === "plugins") {
+    return (
+      <Box flexDirection="column">
+        <Header domain="plugins" />
+        <Rule />
+        {plugins.plugins.length === 0 ? (
+          <Text> No plugins found in the supported IDE configs.</Text>
+        ) : (
+          <Box flexDirection="column" paddingLeft={1}>
+            {plugins.plugins.map((plugin) => (
+              <Text key={`${plugin.ide}:${plugin.name}`}>
+                <Text color="cyan">{plugin.ide.padEnd(10)}</Text>
+                <Text bold>{plugin.name.padEnd(40)}</Text>
+                <Text dimColor>{plugin.detail}</Text>
+              </Text>
+            ))}
+          </Box>
+        )}
+        {plugins.warnings.map((warning) => (
+          <Text key={warning} dimColor>
+            {"  "}
+            {warning}
+          </Text>
+        ))}
+        <Text dimColor> Read-only inventory — managing plugins is out of MVP scope.</Text>
+        <Rule />
+        <KeyBar
+          keys={[
+            ["Tab", "domain"],
+            ["?", "help"],
+            ["q", "quit"],
+          ]}
+        />
+      </Box>
+    );
+  }
+
   const row = rows[selected];
 
   return (
     <Box flexDirection="column">
-      <Header total={inventory.length} />
+      <Header total={inventory.length} domain="skills" />
       <Rule />
       <TabBar inventory={inventory} filterIndex={filterIndex} />
       <Rule />

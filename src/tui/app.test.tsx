@@ -93,6 +93,30 @@ const makeCore = (overrides: Partial<TuiCore> = {}): TuiCore => ({
   applyPlan: vi.fn(() => ({ ok: true as const, message: "applied" })),
   interruptedTransactions: vi.fn(() => []),
   assignSource: vi.fn(() => ({ ok: true as const })),
+  mcpInventory: vi.fn(() => ({
+    servers: [
+      {
+        name: "context7",
+        ide: "opencode" as const,
+        transport: "stdio" as const,
+        target: "npx context7",
+        secretKeys: ["API_KEY"],
+        configPath: "C:/home/.config/opencode/opencode.json",
+      },
+    ],
+    findings: ['MCP server "context7" is configured differently across opencode, claude-code — the IDEs are not talking to the same thing.'],
+    warnings: [],
+  })),
+  pluginInventory: vi.fn(() => ({
+    plugins: [
+      {
+        ide: "opencode" as const,
+        name: "agentrouter-fix.js",
+        detail: "file in plugins directory",
+      },
+    ],
+    warnings: [],
+  })),
   ...overrides,
 });
 
@@ -165,6 +189,45 @@ describe("inventory", () => {
     stdin.write("x");
     await tick();
     expect(lastFrame()).toContain("2 skills");
+    unmount();
+  });
+});
+
+describe("domain tabs", () => {
+  it("Tab cycles Skills → MCP → Plugins → Skills, all read-only", async () => {
+    const { lastFrame, stdin, unmount } = render(<App core={makeCore()} />);
+    await tick();
+    stdin.write("\t");
+    await tick();
+    let frame = lastFrame() ?? "";
+    expect(frame).toContain("context7");
+    expect(frame).toContain("secrets: API_KEY");
+    expect(frame).toContain("secret values are never shown");
+    expect(frame).toContain("configured differently");
+    expect(frame).not.toContain("Enter manage");
+
+    stdin.write("\t");
+    await tick();
+    frame = lastFrame() ?? "";
+    expect(frame).toContain("agentrouter-fix.js");
+    expect(frame).toContain("file in plugins directory");
+
+    stdin.write("\t");
+    await tick();
+    expect(lastFrame()).toContain("2 skills");
+    unmount();
+  });
+
+  it("Enter does nothing on the MCP tab — nothing is actionable there", async () => {
+    const core = makeCore();
+    const { lastFrame, stdin, unmount } = render(<App core={core} />);
+    await tick();
+    stdin.write("\t");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toContain("context7");
+    expect(core.checkContent).not.toHaveBeenCalled();
     unmount();
   });
 });

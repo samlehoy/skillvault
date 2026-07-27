@@ -181,6 +181,8 @@ Dim full-screen overlay listing every key, grouped by screen. Any key closes it.
 | `/`         | Inventory   | Incremental search; Esc clears                  |
 | `a`, `1`–`n`| Inventory   | Target filter tabs                              |
 | `g`         | Inventory   | Toggle grouping: by status ↔ by bundle          |
+| `Tab`       | Inventory   | Switch domain: Skills / MCP / Plugins           |
+| `s`         | Action panel| Set/correct the source repo (user-verified)     |
 | `?`         | Inventory   | Help overlay                                    |
 | `q`         | Inventory   | Quit (main screen only)                         |
 | `space`     | Action panel| Toggle target checkbox                          |
@@ -207,9 +209,13 @@ A **bundle** is a source repository that ships multiple skills (e.g. `obra/super
 - The detail panel and action panel show bundle membership (`▣ part of obra/superpowers — 14 skills`). The action panel's explicit "apply to all N skills from this bundle" batch option ships with the batch mechanics in M7; until then the panel states that honestly, with the standing warning that same-bundle skills may reference each other.
 - Bundle labels come from installer lockfiles (`~/.agents/.skill-lock.json` v3, Antigravity `skills-lock.json` v1) as **Declared** provenance evidence, re-read on every inventory load; that provenance-reading slice was pulled forward from M6 into M5. No evidence → `(unknown source)`, never a name-based guess.
 
-## Planned extension: MCP and Plugins tabs (read-only)
+## MCP and Plugins tabs (read-only — implemented 2026-07-27)
 
-Per ADR-0007, the header gains domain tabs — `[Skills] [MCP] [Plugins]` — where MCP and Plugins are read-only inventories: presence matrix per IDE, same-name-different-config findings for MCP servers, and an installed-plugin list. No action panel exists in those tabs (nothing is mutable), and secret values are never displayed. Detailed screen designs extend this document when that milestone (M6) starts.
+Per ADR-0007, the header carries domain tabs — `[Skills] [MCP] [Plugins]` — switched with `Tab`. MCP and Plugins are read-only inventories: one row per server/plugin with its IDE, transport (stdio/remote), and redacted target (URL query strings stripped); env/header **key names** are listed, values never leave the config files. Same-name-different-config MCP servers produce a yellow finding ("the IDEs are not talking to the same thing"). No selection, no action panel — nothing is mutable there, and Enter is inert by test.
+
+## Set source (`s`, action panel — implemented 2026-07-27)
+
+`s` opens an inline input to record the skill's source repository (owner/repo or a pasted GitHub URL, normalized). Saved as a **user-verified** assertion under `~/.skillvault/state/provenance.json`; user assertions outrank installer declarations for the bundle label, and the bundle line shows its confidence: `▣ part of obra/superpowers (user-verified)`.
 
 ## Out of scope for this iteration
 

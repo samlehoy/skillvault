@@ -7,6 +7,12 @@ import {
   type LocationKey as SkillLocation,
 } from "../adapters/types.js";
 import { readDeclaredBundles } from "../installers/lockfiles.js";
+import {
+  discoverMcpServers,
+  discoverPlugins,
+  type McpInventory,
+  type PluginInventory,
+} from "../mcp/discovery.js";
 import { loadUserAssertions, saveUserAssertion } from "../provenance/store.js";
 import { planLinkSkill } from "../core/link-planner.js";
 import { createPlan, type Plan, type PlanInput, type Precondition } from "../core/plan.js";
@@ -109,6 +115,10 @@ export interface TuiCore {
     id: string,
     repository: string,
   ): { readonly ok: true } | { readonly ok: false; readonly message: string };
+  /** Read-only MCP server inventory (ADR-0007); secrets stay redacted. */
+  mcpInventory(): McpInventory;
+  /** Read-only installed-plugin inventory (ADR-0007). */
+  pluginInventory(): PluginInventory;
 }
 
 export interface FacadeEnvironment {
@@ -405,5 +415,7 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
     applyPlan: apply,
     interruptedTransactions: () => findInterrupted(stateRoot),
     assignSource,
+    mcpInventory: () => discoverMcpServers({ homeDir: env.homeDir }),
+    pluginInventory: () => discoverPlugins({ homeDir: env.homeDir }),
   };
 }
