@@ -294,6 +294,60 @@ describe("buildManagePlan", () => {
     );
   });
 
+  it("offers Antigravity targets only when junction consumption is verified", () => {
+    makeSkill(opencodeSkills(), "gated");
+
+    const gatedOff = createTuiCore({ homeDir: home }).creatableTargets("gated");
+    expect(gatedOff.map((t) => t.key)).toEqual(["claude-external"]);
+
+    const gatedOn = createTuiCore({
+      homeDir: home,
+      antigravityCreatable: true,
+    }).creatableTargets("gated");
+    expect(gatedOn.map((t) => t.key)).toEqual([
+      "antigravity",
+      "antigravity-ide",
+      "claude-external",
+    ]);
+  });
+
+  it("synchronizes one vault entry to OpenCode and Antigravity in a single plan", () => {
+    const source = makeSkill(opencodeSkills(), "cross-ide", "one canon\n");
+    const core = createTuiCore({ homeDir: home, antigravityCreatable: true });
+
+    const built = core.buildManagePlan({
+      id: "cross-ide",
+      paths: [source],
+      createKeys: ["antigravity", "antigravity-ide"],
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const installationIds = built.plan.operations
+      .filter((op) => op.kind === "link-create")
+      .map((op) => (op.kind === "link-create" ? op.installationId : ""));
+    expect(installationIds).toEqual([
+      "opencode:global",
+      "antigravity:global",
+      "antigravity-ide:global",
+    ]);
+
+    expect(core.applyPlan(built.plan).ok).toBe(true);
+    const linkPaths = [
+      source,
+      path.join(home, ".gemini", "antigravity", "skills", "cross-ide"),
+      path.join(home, ".gemini", "antigravity-ide", "skills", "cross-ide"),
+    ];
+    const targets = new Set<string>();
+    for (const p of linkPaths) {
+      const inspection = inspectPath(p);
+      expect(inspection.kind).toBe("junction");
+      if (inspection.kind === "junction") targets.add(inspection.target);
+    }
+    // All three junctions resolve to the same single vault revision.
+    expect(targets.size).toBe(1);
+    expect([...targets][0]).toContain(".skillvault");
+  });
+
   it("never offers the agents store as a creatable target (ADR-0005)", () => {
     makeSkill(opencodeSkills(), "oc-only");
     const creatable = createTuiCore({ homeDir: home }).creatableTargets(

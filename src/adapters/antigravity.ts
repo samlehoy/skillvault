@@ -4,6 +4,16 @@ import { inspectPath } from "../fs/junction.js";
 import type { DiscoveredSkill } from "./types.js";
 
 /**
+ * Whether Antigravity's skill loader has been live-verified to follow
+ * directory junctions on this platform (M0 pending fact; the discovery
+ * facts in docs/adapters/M0_VERIFIED_FACTS.md). Until a live IDE session
+ * proves it — a junction-linked probe skill readable from inside
+ * Antigravity — the adapter stays visibility-only and is never offered as
+ * a creatable link target (IMPLEMENTATION_PLAN.md, M3).
+ */
+export const ANTIGRAVITY_JUNCTION_CONSUMPTION_VERIFIED = false;
+
+/**
  * Antigravity adapter — read-only discovery.
  *
  * Facts per docs/adapters/M0_VERIFIED_FACTS.md: two installed variants keep

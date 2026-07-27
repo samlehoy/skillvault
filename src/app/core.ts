@@ -1,5 +1,8 @@
 import path from "node:path";
-import { discoverSkills as discoverAntigravitySkills } from "../adapters/antigravity.js";
+import {
+  ANTIGRAVITY_JUNCTION_CONSUMPTION_VERIFIED,
+  discoverSkills as discoverAntigravitySkills,
+} from "../adapters/antigravity.js";
 import { discoverSkills as discoverOpencodeSkills } from "../adapters/opencode.js";
 import {
   LOCATION_KEYS_ORDERED,
@@ -124,6 +127,12 @@ export interface TuiCore {
 export interface FacadeEnvironment {
   readonly homeDir: string;
   readonly projectDir?: string;
+  /**
+   * Test-only override for offering Antigravity as a creatable link
+   * target. Production omits it and inherits the adapter's live-verified
+   * capability constant.
+   */
+  readonly antigravityCreatable?: boolean;
 }
 
 const HEALTH_SEVERITY: Record<Health, number> = {
@@ -246,6 +255,9 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
       : { identical: false, options };
   };
 
+  const antigravityCreatable =
+    env.antigravityCreatable ?? ANTIGRAVITY_JUNCTION_CONSUMPTION_VERIFIED;
+
   const creatableTargets = (id: string): CreatableTarget[] => {
     const skill = findSkill(id);
     if (!skill) return [];
@@ -256,6 +268,16 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
         path: path.join(env.homeDir, ".config", "opencode", "skills", id),
       });
     }
+    if (antigravityCreatable) {
+      for (const variant of ["antigravity", "antigravity-ide"] as const) {
+        if (!skill.targets[variant]) {
+          creatable.push({
+            key: variant,
+            path: path.join(env.homeDir, ".gemini", variant, "skills", id),
+          });
+        }
+      }
+    }
     if (!skill.targets["claude-external"]) {
       creatable.push({
         key: "claude-external",
@@ -263,8 +285,8 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
       });
     }
     // agents-external is the npx-skills store; SkillVault never writes into
-    // it (ADR-0005). Antigravity variants stay non-creatable until live
-    // junction consumption by its loader is verified (M0 pending fact).
+    // it (ADR-0005). Antigravity variants are gated on the live-verified
+    // junction-consumption capability (M0 pending fact).
     return creatable;
   };
 
@@ -311,7 +333,13 @@ export function createTuiCore(env: FacadeEnvironment): TuiCore {
 
     const creatable = creatableTargets(request.id);
     const linkTargets: { path: string; installationId: string }[] = [
-      ...request.paths.map((p) => ({ path: p, installationId: "opencode:global" })),
+      ...request.paths.map((p) => {
+        const location = skill.locations.find((l) => l.path === p);
+        return {
+          path: p,
+          installationId: `${location?.key ?? "opencode"}:${location?.scope ?? "global"}`,
+        };
+      }),
       ...(request.createKeys ?? []).flatMap((key) => {
         const target = creatable.find((t) => t.key === key);
         return target
